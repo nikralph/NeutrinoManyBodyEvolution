@@ -205,7 +205,7 @@ try:
 except ValueError:
     print("Invalid Input")
 except Exception as expt:
-    print(f"An unexpected error occurred: {e}")
+    print(f"An unexpected error occurred: {expt}")
 
 Pstates, Nps, pkectrans = pGenerator(zmax)
 
