@@ -1,11 +1,11 @@
+# This program is based on the paper https://arxiv.org/pdf/2404.16690
+# Thank you Vincenzo Cirigliano and Yukari Yamauchi!
+
 import numpy as np
 import matplotlib.pyplot as plt
 #import sys
 
 from scipy.special import comb
-
-# This program is based on the paper https://arxiv.org/pdf/2404.16690
-# Thank you Vincenzo Cirigliano and Yukari Yamauchi!
 
 # Time Evolution Operator; Returns probability
 def timeywimey(EigValues, EigVectors, state, timey):
@@ -14,7 +14,7 @@ def timeywimey(EigValues, EigVectors, state, timey):
     EigValues = np.diag(EigValues)
     expectation = state.T@(EigVectors@EigValues@np.linalg.inv(EigVectors))@state
     probability = expectation*np.conjugate(expectation)
-    return probability[0,0]
+    return probability
 
 # Graph data generator for time evolution operator expectation values
 def timeyGraphdata(EigValues, EigVectors, state, timey, resolution):
@@ -96,26 +96,24 @@ def check(state,Nflav):
 
 
 
-
-
 # Given neutrino's mode index and flavor, return its bin number k = K*flavor + p
 def bin(p, Nflav, flavor):
     return Nflav*p + flavor
 
 # Given a state's binary representation, return its index representation
-def b_to_j(b):
+def b_to_j(b, Nbs):
     oc = []
-    for i in range(Nb):
+    for i in range(Nbs):
         if b[i]==1:
             oc.append(i)
     bstr = ','.join(str(x) for x in oc)
     return bstr_to_j[bstr]
 
 # Given a state's index representation, return its binary representation
-def j_to_b(j):
+def j_to_b(j, Nbs):
     bstr = j_to_bstr[j]
     oc = [int(x) for x in bstr.split(',')]
-    b = [0]*Nb
+    b = [0]*Nbs
     for i in range(len(oc)):
         b[oc[i]] = 1
     return b
@@ -175,9 +173,30 @@ def quar(b, basis):
         f = f * (-1)**np.sum(basis_copy[:b[0]])
     return truth, f, basis_copy
 
-# Full two body interaction term
-def vvFull(j, Ns, flavPairs):
-    instate = j_to_b(j)
+# Generate mass term given basis state j
+def mass(j, Ns, Nps, Nflav, Pstates, flavPairs):
+    instate = j_to_b(j, Nflav*Nps)
+    state = np.zeros(Ns, dtype=complex)
+    for p in range(Nps):
+        kflavs = []
+        for flav in range(Nflav):
+            kflavs.append(bin(p,Nflav,flav))
+        kflavs = np.array(kflavs)
+        for pair in range(len(flavPairs)):
+            
+            # NEED TO DEFINE FACTORS STILL
+            
+            kf1 = flavPairs[pair,0]
+            kf2 = flavPairs[pair,1]
+            truth, fa, outstate = quad([kflavs[kf1],kflavs[kf2]], instate)
+            if truth == True:
+                state[b_to_j(outstate, Nflav*Nps)] += fa #* massfactors[pair]
+    return state
+
+
+# Generate full two body interaction term
+def vvFull(j, Ns, Nps, Nflav, momenta4, flavPairs):
+    instate = j_to_b(j, Nflav*Nps)
     state = np.zeros(Ns, dtype=complex)
     for i in range(len(momenta4)):
         p1 = momenta4[i,0]
@@ -185,33 +204,34 @@ def vvFull(j, Ns, flavPairs):
         q1 = momenta4[i,2]
         q2 = momenta4[i,3]
         factor = - gfs[i]
-        for f in range(len(flavPairs)):
-            ip1 = bin(p1, flavPairs[f,0])
-            ip2 = bin(p1, flavPairs[f,1])
-            iq1 = bin(p1, flavPairs[f,0])
-            iq2 = bin(p1, flavPairs[f,1])
+        for flav in range(len(flavPairs)):
+            ip1 = bin(p1, flavPairs[flav,0])
+            ip2 = bin(p1, flavPairs[flav,1])
+            iq1 = bin(p1, flavPairs[flav,0])
+            iq2 = bin(p1, flavPairs[flav,1])
             truth, fa, outstate = quar([ip1,ip2,iq1,iq2], instate)
             if truth == True:
-                state[b_to_j(outstate)] += fa*factor
+                state[b_to_j(outstate, Nflav*Nps)] += fa*factor
     return state
-    
 
 # Construct the Hamiltonian.
-def buildH(Ns, Nflav):
+def buildH(Ns, Nps, Nflav Pstates, pkectrans, momenta4, gfs):
     H = np.zeros((Ns, Ns), dtype=complex)
     flavPairs = flavInfo(Nflav)
     for i in range(Ns):
         if i%100 == 0:
             print(f"Generating {i}th column of the Hamiltonian..."
-        H[:,i] += mass(i, Ns)
-        H[:,i] += vvFull(i, Ns, flavPairs)
+        H[:,i] += mass(i, Ns, Nps, Nflav, Pstates, flavPairs)
+        H[:,i] += vvFull(i, Ns, Nps, Nflav momenta4, flavPairs)
     return H
 
+# 
 def main():
     return
 
 #if __name__ == '__main__':
 #    Move excess code into __name__ gaurd
+#    main()
 
 # Formatting
 np.set_printoptions(formatter={'all': lambda x: "{:.12g}".format(x)})
