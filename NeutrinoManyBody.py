@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+#import sys
 
 from scipy.special import comb
 
@@ -56,31 +57,45 @@ def pGenerator(zmax):
     Pstates = np.array(Pstates)
     Nps = len(Pstates)
     print(f"Number of momentum modes: {Nps}")
-    
     print("Generating list of two body interactions given conservation of P and KE...")
     pkectrans = []
     gfs = []
+    momenta4 = []
     for ip1 in range(Nps):
         p1 = Pstates[ip1,:]
-        for ip2 in range(ip1,Nps):
+        for ip2 in range(Nps):
             p2 = Pstates[ip2,:]
             for iq1 in range(Nps):
-                if ip1 != iq1:
-                    q1 = Pstates[iq1,:]
-                    for iq2 in range(iq1,Nps):
-                        q2 = Pstates[iq2,:]
-                        Pconserve = p1+p2-q1-q2
-                        if np.linalg.norm(Pconserve) < 1e-9:
-                            KEconserve = np.linalg.norm(p1)+np.linalg.norm(p2)-np.linalg.norm(q1)-np.linalg.norm(q2)
-                            if np.abs(KEconserve) < 1e-9:
-                                gf = gfactor(p1,p2,q1,q2)
-                                if np.abs(gf) > 1e-9:
+                q1 = Pstates[iq1,:]
+                for iq2 in range(Nps):
+                    q2 = Pstates[iq2,:]
+                    Pconserve = p1+p2-q1-q2
+                    if np.linalg.norm(Pconserve) < 1e-9:
+                        KEconserve = np.linalg.norm(p1)+np.linalg.norm(p2)-np.linalg.norm(q1)-np.linalg.norm(q2)
+                        if np.abs(KEconserve) < 1e-9:
+                            gf = gfactor(p1,p2,q1,q2)
+                            if np.abs(gf) > 1e-9:
+                                momenta4.append([ip1,ip2,iq1,iq2])
+                                gfs.append(gf)
+                                if ip1 <= ip2 and iq1 <= iq2 and ip1 != iq1:
                                     pkectrans.append([ip1,ip2,iq1,iq2])
-                                    gfs.append(gf)
-                                    #if ip1 <= ip2 and iq1 <= iq2 and ip1 != iq1:
-                                        #pkectrans.append([ip1,ip2,iq1,iq2])
     pkectrans = np.array(pkectrans)
-    return Pstates, Nps, pkectrans
+    momenta4 = np.array(momenta4)
+    gfs = np.array(gfs)
+    print(f"Number of unique 4-momenta transitions: {len(pkectrans)}")
+    print(f"Number of all 4-momenta transitions: {len(momenta4)}")
+    return Pstates, Nps, pkectrans, momenta4, gfs
+
+# Check if a momentum mode is used more than Nflav times
+def check(state,Nflav):
+    truth = True
+    for i in range(len(state)-Nflav)
+        if np.var(state[i:i+1+Nflav]) < 1e-9:
+            truth = False
+    return truth
+
+
+
 
 
 # Given neutrino's mode index and flavor, return its bin number k = K*flavor + p
@@ -106,7 +121,7 @@ def j_to_b(j):
     return b
 
 # Generate flavor informations.
-def flavorInfo(Nflav):
+def flavInfo(Nflav):
     print("Generating neutrino flavor pairs...")
     flavPairs = []
     for i in range(Nflav):
@@ -118,47 +133,47 @@ def flavorInfo(Nflav):
 # Applying a*(b1)a(b2) to a basis state. Note b = [b1,b2]
 def quad(b, basis):
     basis_copy = basis.copy()
-    l = 1
+    truth = True
     f = 1.0
     if basis_copy[b[1]] == 0:
-        l = 0
+        truth = False
     else:
         basis_copy[b[1]] = 0
         f = f * (-1)**np.sum(basis_copy[:b[1]])
     if basis_copy[b[0]] ==1:
-        l = 0
+        truth = False
     else:
         basis_copy[b[0]] = 1
         f = f * (-1)**np.sum(basis_copy[:b[0]])
-    return l, f, basis_copy
+    return truth, f, basis_copy
 
 
 # Applying a*(b1)a*(b2)a(b3)a(b4) to state. Note b = [b1,b2,b3,b4]
 def quar(b, basis):
     basis_copy = basis.copy()
-    l = 1
+    truth = True
     f = 1.0
     if basis_copy[b[3]] == 0:
-        l = 0
+        truth = False
     else:
         basis_copy[b[3]] = 0
         f = f * (-1)**np.sum(basis_copy[:b[3]])
     if basis_copy[b[2]] == 0:
-        l = 0
+        truth = False
     else:
         basis_copy[b[2]] = 0
         f = f * (-1)**np.sum(basis_copy[:b[2]])
     if basis_copy[b[1]] ==1:
-        l = 0
+        truth = False
     else:
         basis_copy[b[1]] = 1
         f = f * (-1)**np.sum(basis_copy[:b[1]])
     if basis_copy[b[0]] ==1:
-        l = 0
+        truth = False
     else:
         basis_copy[b[0]] = 1
         f = f * (-1)**np.sum(basis_copy[:b[0]])
-    return l, f, basis_copy
+    return truth, f, basis_copy
 
 # Full two body interaction term
 def vvFull(j, Ns, flavPairs):
@@ -175,24 +190,28 @@ def vvFull(j, Ns, flavPairs):
             ip2 = bin(p1, flavPairs[f,1])
             iq1 = bin(p1, flavPairs[f,0])
             iq2 = bin(p1, flavPairs[f,1])
-            t, fa, outstate = quar([ip1,ip2,iq1,iq2], instate)
-            if t == 1:
+            truth, fa, outstate = quar([ip1,ip2,iq1,iq2], instate)
+            if truth == True:
                 state[b_to_j(outstate)] += fa*factor
     return state
     
 
 # Construct the Hamiltonian.
-def buildH(Ns,Np,Nflav):
+def buildH(Ns, Nflav):
     H = np.zeros((Ns, Ns), dtype=complex)
-    flavPairs = flavorInfo(Nflav)
+    flavPairs = flavInfo(Nflav)
     for i in range(Ns):
-        #H[:,i] += mass(i, Ns)
+        if i%100 == 0:
+            print(f"Generating {i}th column of the Hamiltonian..."
+        H[:,i] += mass(i, Ns)
         H[:,i] += vvFull(i, Ns, flavPairs)
+    return H
+
+def main():
     return
 
-
-
-
+#if __name__ == '__main__':
+#    Move excess code into __name__ gaurd
 
 # Formatting
 np.set_printoptions(formatter={'all': lambda x: "{:.12g}".format(x)})
