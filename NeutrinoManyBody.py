@@ -222,7 +222,7 @@ def buildH(Ns, Nps, Nflav Pstates, pkectrans, momenta4, gfs):
         if i%100 == 0:
             print(f"Generating {i}th column of the Hamiltonian..."
         H[:,i] += mass(i, Ns, Nps, Nflav, Pstates, flavPairs)
-        H[:,i] += vvFull(i, Ns, Nps, Nflav momenta4, flavPairs)
+        H[:,i] += vvFull(i, Ns, Nps, Nflav, momenta4, flavPairs)
     return H
 
 # 
@@ -234,7 +234,7 @@ def main():
 #    main()
 
 # Formatting
-np.set_printoptions(formatter={'all': lambda x: "{:.12g}".format(x)})
+#np.set_printoptions(formatter={'all': lambda x: "{:.12g}".format(x)})
 
 # 
 try:
@@ -246,7 +246,7 @@ except ValueError:
 except Exception as expt:
     print(f"An unexpected error occurred: {expt}")
 
-Pstates, Nps, pkectrans = pGenerator(zmax)
+Pstates, Nps, pkectrans, momenta4, gfs = pGenerator(zmax)
 
 Nbs = Nflav*Nps
 
