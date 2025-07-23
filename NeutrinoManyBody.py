@@ -215,7 +215,7 @@ def vvFull(j, Ns, Nps, Nflav, momenta4, flavPairs):
     return state
 
 # Construct the Hamiltonian.
-def buildH(Ns, Nps, Nflav Pstates, pkectrans, momenta4, gfs):
+def buildH(Ns, Nps, Nflav, Pstates, pkectrans, momenta4, gfs):
     H = np.zeros((Ns, Ns), dtype=complex)
     flavPairs = flavInfo(Nflav)
     for i in range(Ns):
