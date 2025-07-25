@@ -5,7 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 #import sys
 
-from scipy.special import comb
+from itertools import combinations
 
 # Time Evolution Operator; Returns probability
 def timeywimey(EigValues, EigVectors, state, timey):
@@ -47,6 +47,7 @@ def gfactor(p1, p2, q1, q2):
 def pGenerator(zmax):
     print("Generating momentum modes...")
     Pstates = []
+    # 1 <= x <= zmax and -zmax+1 <= y <= zmax-1 represents integer coordinates on the circle of radius 5, with a positive x value.
     zxrange = np.array(range(1,zmax+1))
     zyrange = np.array(range(-zmax+1,zmax))
     # Can add in a zzrange if desired, to extend to three dimensional system
@@ -87,18 +88,74 @@ def pGenerator(zmax):
     return Pstates, Nps, pkectrans, momenta4, gfs
 
 # Check if a momentum mode is used more than Nflav times
-def check(state,Nflav):
+def check(state, Nflav):
     truth = True
     for i in range(len(state)-Nflav)
         if np.var(state[i:i+1+Nflav]) < 1e-9:
             truth = False
     return truth
 
+# For a given pair of Nnu momentum modes, return the pairs that Hvv can take to
+def apply(state, Nflav, Nbinom, binom, pkectrans):
+    newstate = []
+    for i in range(Nbinom):
+        k = np.array([state[binom[i,0]], state[binom[i,1]]])
+        for j in range(len(pkectrans)):
+            if np.sum(np.abs(k-pkectrans[j,:2]))==0:
+                state_i = state.copy()
+                state_i[binom[i,0]] = pkectrans[j,2]
+                state_i[binom[i,1]] = pkectrans[j,3]
+                state_i = np.sort(state_i)
+                if check(state_i, Nflav):
+                    newstate.append(state_i)
+    return np.array(newstate)
 
+# Find all states a given initial state can transition into.
+def stateFinder(instate, Nnu, Nflav, pkectrans):
+    binom = np.array(list(combinations([i for i in range(Nnu)],2)))
+    Nbinom = len(binom)
+    nnewstate = 10  # > 1 to enter the while loop
+    p_states = np.array([instate])
+    newstate1 = np.array([np.zeros(Nnu), instate])
+    trial = 0
+    while nnewstate > 1:
+        print(f'---------------- H^{trial+1} ----------------')
+        newstate2 = np.zeros((1,Nnu))
+        for i in range(1,len(newstate1)):
+            newi = apply(newstate1[i], Nflav, Nbinom, binom, pkectrans)
+            if len(newi) > 0:
+                newstate2 = np.append(newstate2, newi, axis=0)
+           
+        newstate1 = np.array([np.zeros(Nnu)])
+        for j in range(1,len(newstate2)):
+            dist = np.sum(np.abs(p_states - newstate2[j]), axis=1)
+            if np.min(dist) > 1e-7:
+                p_states = np.append(p_states, [newstate2[j].astype(int)], axis=0)
+                newstate1 = np.append(newstate1, [newstate2[j]], axis=0)
+        nnewstate = len(newstate1)
+        print(f'Number of new states(mod flavor choice) at this round: {nnewstate-1}')
+        print(f'Number of states(mod flavor choice) visited so far: {len(p_states)}')
+        trial += 1
+    print(f'Number of momentum modes pair with conserved P and E is {len(p_states)}')
+    # Calculate number of states
+    Ns = 0
+    for i in range(len(p_states)):
+        #totp = np.sum(ps[p_states[i]], axis=0)
+        #totke = np.sum(kes[p_states[i]])
+        nstate = 2**Nnu/4**(Nnu-len(set(p_states[i])))
+        Ns += nstate
+        # Sanity Check
+        #if np.sum(np.abs(totp-pinit)) > 1e-7 or np.abs(totke-keinit) > 1e-7:
+        #    print('Total momentum or kinetic energy is not conserved!')
+    print(f'Number of states with conserved P,E, and arbitrary flavor contents is {Ns:.0f}')
+    bins_visited = np.sort(np.array(list(set(p_states.flatten()))))
+    print(f'Activated momentum modes:')
+    print(bins_visited)
+    return p_states
 
 # Given neutrino's mode index and flavor, return its bin number k = K*flavor + p
-def bin(p, Nflav, flavor):
-    return Nflav*p + flavor
+def bin(p, Nflav, flav):
+    return Nflav*p + flav
 
 # Given a state's binary representation, return its index representation
 def b_to_j(b, Nbs):
@@ -189,7 +246,7 @@ def mass(j, Ns, Nps, Nflav, Pstates, flavPairs):
             kf1 = flavPairs[pair,0]
             kf2 = flavPairs[pair,1]
             truth, fa, outstate = quad([kflavs[kf1],kflavs[kf2]], instate)
-            if truth == True:
+            if truth is True:
                 state[b_to_j(outstate, Nflav*Nps)] += fa #* massfactors[pair]
     return state
 
@@ -210,7 +267,7 @@ def vvFull(j, Ns, Nps, Nflav, momenta4, flavPairs):
             iq1 = bin(p1, flavPairs[flav,0])
             iq2 = bin(p1, flavPairs[flav,1])
             truth, fa, outstate = quar([ip1,ip2,iq1,iq2], instate)
-            if truth == True:
+            if truth is True:
                 state[b_to_j(outstate, Nflav*Nps)] += fa*factor
     return state
 
@@ -223,6 +280,7 @@ def buildH(Ns, Nps, Nflav, Pstates, pkectrans, momenta4, gfs):
             print(f"Generating {i}th column of the Hamiltonian..."
         H[:,i] += mass(i, Ns, Nps, Nflav, Pstates, flavPairs)
         H[:,i] += vvFull(i, Ns, Nps, Nflav, momenta4, flavPairs)
+    print("The Hamiltonian has be generated.")
     return H
 
 # 
@@ -234,7 +292,7 @@ def main():
 #    main()
 
 # Formatting
-#np.set_printoptions(formatter={'all': lambda x: "{:.12g}".format(x)})
+np.set_printoptions(formatter={'all': lambda x: "{:.12g}".format(x)})
 
 # 
 try:
