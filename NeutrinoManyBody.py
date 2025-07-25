@@ -125,7 +125,6 @@ def stateFinder(instate, Nnu, Nflav, pkectrans):
             newi = apply(newstate1[i], Nflav, Nbinom, binom, pkectrans)
             if len(newi) > 0:
                 newstate2 = np.append(newstate2, newi, axis=0)
-           
         newstate1 = np.array([np.zeros(Nnu)])
         for j in range(1,len(newstate2)):
             dist = np.sum(np.abs(p_states - newstate2[j]), axis=1)
@@ -292,7 +291,7 @@ def main():
 #    main()
 
 # Formatting
-np.set_printoptions(formatter={'all': lambda x: "{:.12g}".format(x)})
+#np.set_printoptions(formatter={'all': lambda x: "{:.12g}".format(x)})
 
 # 
 try:
