@@ -303,7 +303,7 @@ def buildH(Ns, Nps, Nflav, Pstates, pkectrans, momenta4, gfs):
     flavPairs = flavInfo(Nflav)
     for i in range(Ns):
         if i%100 == 0:
-            print(f"Generating {i}th column of the Hamiltonian..."
+            print(f"Generating {i}th column of the Hamiltonian...")
         H[:,i] += mass(i, Ns, Nps, Nflav, Pstates, flavPairs)
         H[:,i] += vvFull(i, Ns, Nps, Nflav, momenta4, flavPairs)
     print("The Hamiltonian has be generated.")
