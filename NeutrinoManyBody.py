@@ -150,7 +150,36 @@ def stateFinder(instate, Nnu, Nflav, pkectrans):
     bins_visited = np.sort(np.array(list(set(p_states.flatten()))))
     print(f'Activated momentum modes:')
     print(bins_visited)
-    return p_states
+    # Find all states with arbitrary flavor contents.
+    
+    # NEED TO GENERALIZE BELOW BLOCK STILL
+    
+    states = []
+    for l in p_states:
+        nstate = int(2**len(l)/4**(len(l)-len(list(set(l)))))
+        rp = []
+        if nstate < 2**len(l):
+            for i in range(len(l)-1):
+                if l[i] == l[i+1]:
+                    rp.append(l[i])
+        nrp = [x for x in l if x not in rp]
+        Nnrp = len(nrp)
+        for i in range(nstate):
+            state = []
+            for j in range(len(rp)):
+                state.append(2*rp[j])
+                state.append(2*rp[j]+1)
+            for j in range(Nnrp):
+                state.append(2*nrp[j]+(i//2**(Nnrp-j-1))%2)
+            states.append(sorted(state))
+    Ns = len(states)
+    bstr_to_j = {}
+    j_to_bstr = {}
+    for i in range(Ns):
+        b = ','.join(str(int(x)) for x in states[i])
+        bstr_to_j[b] = i
+        j_to_bstr[i] = b
+    return Ns, p_states, bstr_to_j, j_to_bstr
 
 # Given neutrino's mode index and flavor, return its bin number k = K*flavor + p
 def bin(p, Nflav, flav):
@@ -201,7 +230,6 @@ def quad(b, basis):
         f = f * (-1)**np.sum(basis_copy[:b[0]])
     return truth, f, basis_copy
 
-
 # Applying a*(b1)a*(b2)a(b3)a(b4) to state. Note b = [b1,b2,b3,b4]
 def quar(b, basis):
     basis_copy = basis.copy()
@@ -249,7 +277,6 @@ def mass(j, Ns, Nps, Nflav, Pstates, flavPairs):
                 state[b_to_j(outstate, Nflav*Nps)] += fa #* massfactors[pair]
     return state
 
-
 # Generate full two body interaction term
 def vvFull(j, Ns, Nps, Nflav, momenta4, flavPairs):
     instate = j_to_b(j, Nflav*Nps)
@@ -281,6 +308,27 @@ def buildH(Ns, Nps, Nflav, Pstates, pkectrans, momenta4, gfs):
         H[:,i] += vvFull(i, Ns, Nps, Nflav, momenta4, flavPairs)
     print("The Hamiltonian has be generated.")
     return H
+
+
+
+# 
+def observable(Nbs, Ns, State):
+    obs = np.zeros(Nb, dtype=complex)
+    for i in range(Ns):
+        binary = j_to_b(i)
+        obs += np.abs(state[i]**2*np.array(binary)
+    return obs
+
+# returns string of time and wave function amplitude
+def print_cstr(state,i):
+    return str(i*dt) + ' ' + ' '.join([str(x) for x in state]) 
+
+# returns string of time and occupation number per bin
+def print_nstr(state,i):
+    obs = observable(state)
+    return str(i*dt) + ' ' + ' '.join([str(x) for x in obs]) 
+
+
 
 # 
 def main():
