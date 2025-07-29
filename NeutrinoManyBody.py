@@ -152,7 +152,7 @@ def stateFinder(instate, Nnu, Nflav, pkectrans):
     print(bins_visited)
     # Find all states with arbitrary flavor contents.
     
-    # NEED TO GENERALIZE BELOW BLOCK STILL
+    # NEED TO GENERALIZE THE BLOCK BELOW STILL
     
     states = []
     for l in p_states:
@@ -267,7 +267,7 @@ def mass(j, Ns, Nps, Nflav, Nbs, Pstates, flavPairs, bstr_to_j, j_to_bstr, tbar,
             kflavs.append(bin(p, Nflav, flav))
         kflavs = np.array(kflavs)
         
-        # NEED TO DEFINE FACTORS STILL
+        # NEED TO GENERALIZE FACTORS STILL
         absp = np.linalg.norm(Pstates[p])
         factor_ee = tbar*absp - np.cos(2*angle)*wbar/absp
         factor_mm = tbar*absp + np.cos(2*angle)*wbar/absp
