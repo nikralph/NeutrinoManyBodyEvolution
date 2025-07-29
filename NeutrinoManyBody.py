@@ -136,8 +136,6 @@ def stateFinder(instate, Nnu, Nflav, pkectrans):
         print(f'Number of states(mod flavor choice) visited so far: {len(p_states)}')
         trial += 1
     print(f'Number of momentum modes pair with conserved P and E is {len(p_states)}')
-    for i in p_states:
-        print(i)
     # Calculate number of states
     Ns = 0
     for i in range(len(p_states)):
