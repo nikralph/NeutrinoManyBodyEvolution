@@ -319,7 +319,7 @@ def buildH(Ns, Nps, Nflav, Nbs, Pstates, pkectrans, momenta4, gfs, bstr_to_j, j_
     for i in range(Ns):
         if i%100 == 0:
             print(f"Generating {i}th column of the Hamiltonian...")
-        # Ignore Mass term for now; In dense media we expact interactions to supress vaccume oscillations, so the Hvv term should dominate. Test with mass term later.
+        # Ignore Mass term for now; In dense neutrino gases we expact interactions to supress vacuum oscillations, so the Hvv term should dominate. Test with mass term later.
         #H[:,i] += mass(i, Ns, Nps, Nflav, Nbs, Pstates, flavPairs, bstr_to_j, j_to_bstr, tbar, wbar, angle)
         H[:,i] += vvFull(i, Ns, Nps, Nflav, Nbs, momenta4, gfs, flavPairs, bstr_to_j, j_to_bstr)
     print("The Hamiltonian has be generated.")
