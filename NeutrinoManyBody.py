@@ -112,7 +112,7 @@ def apply(state, Nflav, Nbinom, binom, pkectrans):
 
 # Find all states a given initial state can transition into.
 def stateFinder(instate, Nnu, Nflav, pkectrans):
-    binom = np.array(list(combinations([i for i in range(Nnu)],2)))
+    binom = np.array(list(combinations([i for i in range(Nnu)], 2)))
     Nbinom = len(binom)
     nnewstate = 10  # > 1 to enter the while loop
     p_states = np.array([instate])
@@ -142,6 +142,7 @@ def stateFinder(instate, Nnu, Nflav, pkectrans):
         #totp = np.sum(ps[p_states[i]], axis=0)
         #totke = np.sum(kes[p_states[i]])
         nstate = 2**Nnu/4**(Nnu-len(set(p_states[i])))
+        #nstate = Nflav**Nnu/(Nflav**2)**(Nnu-len(set(p_states[i])))
         Ns += nstate
         # Sanity Check
         #if np.sum(np.abs(totp-pinit)) > 1e-7 or np.abs(totke-keinit) > 1e-7:
@@ -152,26 +153,34 @@ def stateFinder(instate, Nnu, Nflav, pkectrans):
     print(bins_visited)
     # Find all states with arbitrary flavor contents.
     
-    # NEED TO GENERALIZE THE BLOCK BELOW STILL
+    # NEED TO GENERALIZE BELOW BLOCK STILL
     
+    # TRY: rp = [nrp, rp1, rp2, ...] and use (index = number of repeated modes) for checking each modes-Nflavs mod Nflav
+    # Check flavor conservation when using only Hvv term.
     states = []
-    for l in p_states:
-        nstate = int(2**len(l)/4**(len(l)-len(list(set(l)))))
-        rp = []
-        if nstate < 2**len(l):
-            for i in range(len(l)-1):
-                if l[i] == l[i+1]:
-                    rp.append(l[i])
-        nrp = [x for x in l if x not in rp]
-        Nnrp = len(nrp)
-        for i in range(nstate):
-            state = []
-            for j in range(len(rp)):
-                state.append(2*rp[j])
-                state.append(2*rp[j]+1)
-            for j in range(Nnrp):
-                state.append(2*nrp[j]+(i//2**(Nnrp-j-1))%2)
-            states.append(sorted(state))
+    if Nflav > 1:
+        for l in p_states:
+            nstate = int(2**len(l)/4**(len(l)-len(list(set(l)))))#int(Nflav**len(l)/(Nflav**Nflav)**(len(l)-len(list(set(l)))))
+            rp = []
+            if nstate < 2**len(l):#Nflav**len(l):
+                for i in range(len(l)-1):
+                    if l[i] == l[i+1]:
+                        rp.append(l[i])
+            nrp = [x for x in l if x not in rp]
+            Nnrp = len(nrp)
+            for i in range(nstate):
+                state = []
+                for j in range(len(rp)):
+                    #for flav in Nflav:
+                        #state.append(Nflav*rp[j]+flav)
+                    state.append(2*rp[j])
+                    state.append(2*rp[j]+1)
+                for j in range(Nnrp):
+                    state.append(2*nrp[j]+(i//2**(Nnrp-j-1))%2)
+                    #state.append(Nflav*nrp[j]+(i//Nflav**(Nnrp-j-1))%Nflav)
+                states.append(sorted(state))
+    elif Nflav == 1:
+        states = p_states
     Ns = len(states)
     bstr_to_j = {}
     j_to_bstr = {}
@@ -267,7 +276,7 @@ def mass(j, Ns, Nps, Nflav, Nbs, Pstates, flavPairs, bstr_to_j, j_to_bstr, tbar,
             kflavs.append(bin(p, Nflav, flav))
         kflavs = np.array(kflavs)
         
-        # NEED TO GENERALIZE FACTORS STILL
+        # NEED TO DEFINE FACTORS STILL
         absp = np.linalg.norm(Pstates[p])
         factor_ee = tbar*absp - np.cos(2*angle)*wbar/absp
         factor_mm = tbar*absp + np.cos(2*angle)*wbar/absp
@@ -295,12 +304,12 @@ def vvFull(j, Ns, Nps, Nflav, Nbs, momenta4, gfs, flavPairs, bstr_to_j, j_to_bst
         factor = - gfs[i]
         for flav in range(len(flavPairs)):
             ip1 = bin(p1, Nflav, flavPairs[flav,0])
-            ip2 = bin(p1, Nflav, flavPairs[flav,1])
-            iq1 = bin(p1, Nflav, flavPairs[flav,0])
-            iq2 = bin(p1, Nflav, flavPairs[flav,1])
+            ip2 = bin(p2, Nflav, flavPairs[flav,1])
+            iq1 = bin(q1, Nflav, flavPairs[flav,0])
+            iq2 = bin(q2, Nflav, flavPairs[flav,1])
             truth, fa, outstate = quar([ip1,ip2,iq1,iq2], instate)
             if truth is True:
-                state[b_to_j(outstate, Nbs, bstr_to_j)] += fa*factor
+                state[b_to_j(outstate, Nbs, bstr_to_j)] += fa * factor
     return state
 
 # Construct the Hamiltonian.
@@ -310,7 +319,8 @@ def buildH(Ns, Nps, Nflav, Nbs, Pstates, pkectrans, momenta4, gfs, bstr_to_j, j_
     for i in range(Ns):
         if i%100 == 0:
             print(f"Generating {i}th column of the Hamiltonian...")
-        H[:,i] += mass(i, Ns, Nps, Nflav, Nbs, Pstates, flavPairs, bstr_to_j, j_to_bstr, tbar, wbar, angle)
+        # Ignore Mass term for now; In dense media we expact interactions to supress vaccume oscillations, so the Hvv term should dominate. Test with mass term later.
+        #H[:,i] += mass(i, Ns, Nps, Nflav, Nbs, Pstates, flavPairs, bstr_to_j, j_to_bstr, tbar, wbar, angle)
         H[:,i] += vvFull(i, Ns, Nps, Nflav, Nbs, momenta4, gfs, flavPairs, bstr_to_j, j_to_bstr)
     print("The Hamiltonian has be generated.")
     return H
@@ -318,11 +328,11 @@ def buildH(Ns, Nps, Nflav, Nbs, Pstates, pkectrans, momenta4, gfs, bstr_to_j, j_
 
 
 # 
-def observable(Nbs, Ns, dt, state, j_to_bstr):
-    obs = np.zeros(Nbs, dtype=complex)
+def observable(Nbs, Ns, Nflav, dt, state, j_to_bstr):
+    obs = np.zeros(Nbs)
     for i in range(Ns):
         binary = j_to_b(i, Nbs, j_to_bstr)
-        obs += np.abs(state[i]**2*np.array(binary, dtype=complex))
+        obs += np.abs(state[i]**2*np.array(binary))
     return obs
 
 # returns string of time and wave function amplitude
@@ -330,22 +340,51 @@ def print_cstr(state, i, dt):
     return str(i*dt) + ' ' + ' '.join([str(x) for x in state]) 
 
 # returns string of time and occupation number per bin
-def print_nstr(state, i, dt):
-    obs = observable(Nbs, Ns, dt, state, j_to_bstr)
-    return str(i*dt) + ' ' + ' '.join([str(x) for x in obs]) 
+def print_nstr(state, i, Nbs, Ns, Nflav, dt, j_to_bstr):
+    obs = observable(Nbs, Ns, Nflav, dt, state, j_to_bstr)
+    obslist = [i*dt] + [x for x in obs]
+    return str(i*dt) + ' ' + ' '.join([str(x) for x in obs]), obslist
 
-
+# Momentum observable
+def nplus(state, U, Nbs, Ns, Nps, Nflav, dt, Nt, j_to_bstr):
+    plt.figure(figsize=(8,6))
+    times = linspace(0, dt/Nt, Nt+1)
+    npobs = np.array([])
+    obsstr, obslist = print_nstr(state, 0, Nbs, Ns, Nflav, dt, j_to_bstr)
+    obs = np.zeros(Nps)
+    for j in range(Nps):
+        for flav in range(Nflav):
+            obs[j] += (1/Nflav)*obslist[Nflav*j+flav]
+    np.append(npobs, obs.T)
+    for i in range(1, Nt+1):
+        state = U @ state
+        n = np.linalg.norm(state)
+        if abs(n-1.0) > 1e-5:
+            print('Norm off by > 1e-5 at time ', i*dt)
+        obs = np.zeros(Nps)
+        obsstr, obslist = print_nstr(state, i, Nbs, Ns, Nflav, dt, j_to_bstr)
+        for j in range(obs):
+            for flav in range(Nflav):
+                obs[j] += (1/Nflav)*obslist[Nflav*j+flav]
+        np.append(npobs, obs.T)
+    for i in range(Nps):
+        plt.plot(npobs[i], times, color='black', linewidth=0.5)
+    
+    # TODO: finish plot and test
+    
+    plt.title('')
+    plt.xlabel('')
+    plt.ylabel('')
+    plt.show()
+    return
 
 # 
 def main():
     return
 
 # QA testing
-def test1():
-    zmax = 5
-    instate = np.sort(np.array([0,5,8,10,12,20,25,26,28,33]))
+def test(Nflav, zmax, instate):
     Nnu = len(instate)
-    Nflav = 2
     
     Pstates, Nps, pkectrans, momenta4, gfs = pGenerator(zmax)
     Ns, p_states, bstr_to_j, j_to_bstr = stateFinder(instate, Nnu, Nflav, pkectrans)
@@ -353,6 +392,96 @@ def test1():
     Nbs = Nflav*Nps
     tbar = 10**(4)
     wbar = 1
+    angle = (1/2)*np.arcsin(0.8)
+    dt = 0.01
+    Nt = 1000
+    
+    H = buildH(Ns, Nps, Nflav, Nbs, Pstates, pkectrans, momenta4, gfs, bstr_to_j, j_to_bstr, tbar, wbar, angle)
+    print("Diagonalizing the hamiltonian...")
+    Evals, Evecs = np.linalg.eigh(H)
+    print("Done diagonalizing hamiltonian.")
+    U = Evecs @ np.diag(np.exp(-dt*Evals*1j)) @ Evecs.conj().T
+    
+    state = np.zeros(Ns, dtype=complex)
+    trying = True
+    while trying:
+        bchoose = input(f"Choose initial state by inputting {Nnu} allowed momenta and flavors as a pair: momenta,flavor (use space to separate pairs): ")
+        if len([x for x in bchoose.split(' ')]) == Nnu:
+            trying = False
+        b = np.zeros(Nbs, dtype=int)
+        for things in bchoose.split(' '):
+            i, j = [int(x) for x in things.split(',')]
+            b[Nflav*i+j] = 1
+            if j not in [0,1]:
+                trying = True
+            if Nflav*i > Nbs:
+                trying = True
+        #b = ' '.join([str(x) for x in b])
+    initj = b_to_j(b, Nbs, bstr_to_j)
+    state[initj] = 1.0
+    
+    for i in range(1, Nt+1):
+        state = U @ state
+        n = np.linalg.norm(state)
+        if abs(n-1.) > 1e-5:
+            print('Norm off by > 1e-5 at time ', i*dt)
+        obsstr, obslist = print_nstr(state, i, Nbs, Ns, Nflav, dt, j_to_bstr)
+        print(obsstr)
+    return
+
+def test1():
+    zmax = 5
+    instate = np.sort(np.array([0,5,8,10,12,20,25,26,28,33]))
+    Nnu = len(instate)
+    Nflav = 1
+    
+    Pstates, Nps, pkectrans, momenta4, gfs = pGenerator(zmax)
+    Ns, p_states, bstr_to_j, j_to_bstr = stateFinder(instate, Nnu, Nflav, pkectrans)
+    
+    Nbs = Nflav*Nps
+    tbar = 10**(4)
+    wbar = 1
+    angle = (1/2)*np.arcsin(0.8)
+    dt = 0.01
+    Nt = 1000
+    
+    H = buildH(Ns, Nps, Nflav, Nbs, Pstates, pkectrans, momenta4, gfs, bstr_to_j, j_to_bstr, tbar, wbar, angle)
+    print("Diagonalizing the hamiltonian...")
+    EVals, EVecs = np.linalg.eigh(H)
+    print("Done diagonalizing hamiltonian.")
+    U = EVecs @ np.diag(np.exp(-dt*EVals*1j)) @ EVecs.conj().T
+    
+    state = np.zeros(Ns)*1j
+    trying = True
+    while trying:
+        bchoose = input(f"Input {Nnu} allowed momenta and flavors as (momenta:flavor): ")
+        if len([x for x in bchoose.split(',')]) == Nnu:
+            trying = False
+        b = np.zeros(Nbs, dtype=int)
+        for things in bchoose.split(','):
+            i, j = [int(x) for x in things.split(':')]
+            b[Nflav*i+j] = 1
+            if j not in [0,1]:
+                trying = True
+            if Nflav*i > Nbs:
+                trying = True
+        b = ','.join([str(x) for x in b])
+    initj = b_to_j(b, Nbs, bstr_to_j)
+    
+    return
+    
+def test2():
+    zmax = 5
+    instate = np.sort(np.array([0,5,8,10,12,20,25,26,28,33]))
+    Nnu = len(instate)
+    Nflav = 1
+    
+    Pstates, Nps, pkectrans, momenta4, gfs = pGenerator(zmax)
+    Ns, p_states, bstr_to_j, j_to_bstr = stateFinder(instate, Nnu, Nflav, pkectrans)
+    
+    Nbs = Nflav*Nps
+    tbar = 10**(4)
+    wbar = 2
     angle = (1/2)*np.arcsin(0.8)
     dt = 0.01
     Nt = 1000
@@ -381,7 +510,6 @@ def test1():
     initj = b_to_j(b, Nbs, bstr_to_j)
     
     return
-    
 
 #if __name__ == '__main__':
 #    Move excess code into __name__ gaurd
@@ -389,18 +517,3 @@ def test1():
 
 # Formatting
 #np.set_printoptions(formatter={'all': lambda x: "{:.12g}".format(x)})
-
-# 
-# try:
-    # Nnu = int(input("Enter the number of neutrinos: "))     # Number of Neutrinos
-    # Nflav = int(input("Enter the number of flavors: "))     # Number of Flavor states
-    # zmax = int(input("Enter the momentum threshold: "))     # Used for generating Momentum modes
-# except ValueError:
-    # print("Invalid Input")
-# except Exception as expt:
-    # print(f"An unexpected error occurred: {expt}")
-
-# Pstates, Nps, pkectrans, momenta4, gfs = pGenerator(zmax)
-
-# Nbs = Nflav*Nps
-
