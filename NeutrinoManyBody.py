@@ -160,7 +160,8 @@ def stateFinder(instate, Nnu, Nflav, pkectrans):
     states = []
     if Nflav > 1:
         for l in p_states:
-            nstate = int(2**len(l)/4**(len(l)-len(list(set(l)))))#int(Nflav**len(l)/(Nflav**Nflav)**(len(l)-len(list(set(l)))))
+            nstate = int(2**len(l)/4**(len(l)-len(list(set(l)))))
+            #nstate = int(Nflav**len(l)/(Nflav**Nflav)**(len(l)-len(list(set(l)))))
             rp = []
             if nstate < 2**len(l):#Nflav**len(l):
                 for i in range(len(l)-1):
@@ -319,7 +320,7 @@ def buildH(Ns, Nps, Nflav, Nbs, Pstates, pkectrans, momenta4, gfs, bstr_to_j, j_
     for i in range(Ns):
         if i%100 == 0:
             print(f"Generating {i}th column of the Hamiltonian...")
-        # Ignore Mass term for now; In dense neutrino gases we expact interactions to supress vacuum oscillations, so the Hvv term should dominate. Test with mass term later.
+        # Ignore Mass term for now; In dense media we expact interactions to supress vaccume oscillations, so the Hvv term should dominate. Test with mass term later.
         #H[:,i] += mass(i, Ns, Nps, Nflav, Nbs, Pstates, flavPairs, bstr_to_j, j_to_bstr, tbar, wbar, angle)
         H[:,i] += vvFull(i, Ns, Nps, Nflav, Nbs, momenta4, gfs, flavPairs, bstr_to_j, j_to_bstr)
     print("The Hamiltonian has be generated.")
@@ -345,9 +346,12 @@ def print_nstr(state, i, Nbs, Ns, Nflav, dt, j_to_bstr):
     obslist = [i*dt] + [x for x in obs]
     return str(i*dt) + ' ' + ' '.join([str(x) for x in obs]), obslist
 
-# Momentum observable
-def nplus(state, U, Nbs, Ns, Nps, Nflav, dt, Nt, j_to_bstr):
-    plt.figure(figsize=(8,6))
+# Graph generator for momentum observable
+def nplus(instate, U, Nbs, Ns, Nps, Nflav, dt, Nt, j_to_bstr):
+    state = instate.copy()
+    print("Generating graph for momentum observable...")
+    plt.rcParams['text.usetex'] = True
+    graph = plt.figure(figsize=(8,6))
     times = linspace(0, dt/Nt, Nt+1)
     npobs = np.array([])
     obsstr, obslist = print_nstr(state, 0, Nbs, Ns, Nflav, dt, j_to_bstr)
@@ -359,7 +363,7 @@ def nplus(state, U, Nbs, Ns, Nps, Nflav, dt, Nt, j_to_bstr):
     for i in range(1, Nt+1):
         state = U @ state
         n = np.linalg.norm(state)
-        if abs(n-1.0) > 1e-5:
+        if abs(n-1.0) > 1e-5: # Sanity Check
             print('Norm off by > 1e-5 at time ', i*dt)
         obs = np.zeros(Nps)
         obsstr, obslist = print_nstr(state, i, Nbs, Ns, Nflav, dt, j_to_bstr)
@@ -368,15 +372,47 @@ def nplus(state, U, Nbs, Ns, Nps, Nflav, dt, Nt, j_to_bstr):
                 obs[j] += (1/Nflav)*obslist[Nflav*j+flav]
         np.append(npobs, obs.T)
     for i in range(Nps):
-        plt.plot(npobs[i], times, color='black', linewidth=0.5)
-    
-    # TODO: finish plot and test
-    
-    plt.title('')
-    plt.xlabel('')
-    plt.ylabel('')
-    plt.show()
-    return
+        graph.plot(npobs[i], times, color='black', linewidth=0.5)
+    #plt.title('$N_{i}^{+}N$ Observable')
+    graph.xlim([0,Nt*dt])
+    graph.xlabel('time $(\epsilon^{-1})$')
+    graph.ylabel('$N_{i}^{+}N$')
+    graph.show()
+    return state
+
+# Graph generator for flavor observable
+def nminus(instate, U, Nbs, Ns, Nps, Nflav, dt, Nt, j_to_bstr):
+    state = instate.copy()
+    print("Generating graph for N+ observable...")
+    plt.rcParams['text.usetex'] = True
+    graph = plt.figure(figsize=(8,6))
+    times = linspace(0, dt/Nt, Nt+1)
+    npobs = np.array([])
+    obsstr, obslist = print_nstr(state, 0, Nbs, Ns, Nflav, dt, j_to_bstr)
+    obs = np.zeros(Nps)
+    for j in range(Nps):
+        for flav in range(Nflav):
+            obs[j] += (1/Nflav)*obslist[Nflav*j+flav]
+    np.append(npobs, obs.T)
+    for i in range(1, Nt+1):
+        state = U @ state
+        n = np.linalg.norm(state)
+        if abs(n-1.0) > 1e-5: # Sanity Check
+            print('Norm off by > 1e-5 at time ', i*dt)
+        obs = np.zeros(Nps)
+        obsstr, obslist = print_nstr(state, i, Nbs, Ns, Nflav, dt, j_to_bstr)
+        for j in range(obs):
+            for flav in range(Nflav):
+                obs[j] += (1/Nflav)*obslist[Nflav*j+flav]
+        np.append(npobs, obs.T)
+    for i in range(Nps):
+        graph.plot(npobs[i], times, color='black', linewidth=0.5)
+    #plt.title('$N_{i}^{-}N$ Observable')
+    graph.xlim([0,Nt*dt])
+    graph.xlabel('time $(\epsilon^{-1})$')
+    graph.ylabel('$N_{i}^{-}N$')
+    graph.show()
+    return graph
 
 # 
 def main():
@@ -419,14 +455,8 @@ def test(Nflav, zmax, instate):
         #b = ' '.join([str(x) for x in b])
     initj = b_to_j(b, Nbs, bstr_to_j)
     state[initj] = 1.0
-    
-    for i in range(1, Nt+1):
-        state = U @ state
-        n = np.linalg.norm(state)
-        if abs(n-1.) > 1e-5:
-            print('Norm off by > 1e-5 at time ', i*dt)
-        obsstr, obslist = print_nstr(state, i, Nbs, Ns, Nflav, dt, j_to_bstr)
-        print(obsstr)
+
+    graph01 = nplus(state, U, Nbs, Ns, Nps, Nflav, dt, Nt, j_to_bstr)
     return
 
 def test1():
@@ -464,47 +494,6 @@ def test1():
             if j not in [0,1]:
                 trying = True
             if Nflav*i > Nbs:
-                trying = True
-        b = ','.join([str(x) for x in b])
-    initj = b_to_j(b, Nbs, bstr_to_j)
-    
-    return
-    
-def test2():
-    zmax = 5
-    instate = np.sort(np.array([0,5,8,10,12,20,25,26,28,33]))
-    Nnu = len(instate)
-    Nflav = 1
-    
-    Pstates, Nps, pkectrans, momenta4, gfs = pGenerator(zmax)
-    Ns, p_states, bstr_to_j, j_to_bstr = stateFinder(instate, Nnu, Nflav, pkectrans)
-    
-    Nbs = Nflav*Nps
-    tbar = 10**(4)
-    wbar = 2
-    angle = (1/2)*np.arcsin(0.8)
-    dt = 0.01
-    Nt = 1000
-    
-    H = buildH(Ns, Nps, Nflav, Nbs, Pstates, pkectrans, momenta4, gfs, bstr_to_j, j_to_bstr, tbar, wbar, angle)
-    print("Diagonalizing the hamiltonian...")
-    EVals, EVecs = np.linalg.eigh(H)
-    print("Done diagonalizing hamiltonian.")
-    U = EVecs @ np.diag(np.exp(-dt*EVals*1j)) @ EVecs.conj().T
-    
-    state = np.zeros(Ns)*1j
-    trying = True
-    while trying:
-        bchoose = input(f"Input {Nnu} allowed momenta and flavors as (momenta:flavor): ")
-        if len([x for x in bchoose.split(',')]) == Nnu:
-            trying = False
-        b = np.zeros(Nbs, dtype=int)
-        for things in bchoose.split(','):
-            i, j = [int(x) for x in things.split(':')]
-            b[2*i+j] = 1
-            if j not in [0,1]:
-                trying = True
-            if 2*i > Nbs:
                 trying = True
         b = ','.join([str(x) for x in b])
     initj = b_to_j(b, Nbs, bstr_to_j)
