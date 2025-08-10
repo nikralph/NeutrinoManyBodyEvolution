@@ -6,6 +6,8 @@ import matplotlib.pyplot as plt
 #import sys
 
 from itertools import combinations
+from collections import Counter
+from math import comb
 
 # Time Evolution Operator; Returns probability
 def timeywimey(EigValues, EigVectors, state, timey):
@@ -111,7 +113,7 @@ def apply(state, Nflav, Nbinom, binom, pkectrans):
     return np.array(newstate)
 
 # Find all states a given initial state can transition into.
-def stateFinder(instate, Nnu, Nflav, pkectrans):
+def stateFinder(instate, Nnu, Nflav, flavcons, pkectrans):
     binom = np.array(list(combinations([i for i in range(Nnu)], 2)))
     Nbinom = len(binom)
     nnewstate = 10  # > 1 to enter the while loop
@@ -138,32 +140,35 @@ def stateFinder(instate, Nnu, Nflav, pkectrans):
     print(f'Number of momentum modes pair with conserved P and E is {len(p_states)}')
     # Calculate number of states
     Ns = 0
+    skipped = 0
     for i in range(len(p_states)):
-        #totp = np.sum(ps[p_states[i]], axis=0)
-        #totke = np.sum(kes[p_states[i]])
-        nstate = 2**Nnu/4**(Nnu-len(set(p_states[i])))
-        #nstate = Nflav**Nnu/(Nflav**2)**(Nnu-len(set(p_states[i])))
-        Ns += nstate
-        # Sanity Check
-        #if np.sum(np.abs(totp-pinit)) > 1e-7 or np.abs(totke-keinit) > 1e-7:
-        #    print('Total momentum or kinetic energy is not conserved!')
+        pscounter = Counter(p_states[i])
+        Nrptemp = {}
+        for p in sorted(pscounter.values()):
+            Nrptemp[p] = Nrptemp.get(p, 0) + 1
+        Nrp = [0 for x in range(max(Nrptemp.keys()))]
+        for key in Nrptemp.keys():
+            Nrp[key-1] = Nrptemp[key]
+        #if all(Nnu - count*Nrp[count] >= 0 for count in range(len(Nrp))):
+        
     print(f'Number of states with conserved P,E, and arbitrary flavor contents is {Ns:.0f}')
     bins_visited = np.sort(np.array(list(set(p_states.flatten()))))
     print(f'Activated momentum modes:')
     print(bins_visited)
     # Find all states with arbitrary flavor contents.
     
-    # NEED TO GENERALIZE BELOW BLOCK STILL
+    # NEED TO GENERALIZE BELOW BLOCK STILL FOR NFLAV >= 3
     
     # TRY: rp = [nrp, rp1, rp2, ...] and use (index = number of repeated modes) for checking each modes-Nflavs mod Nflav
     # Check flavor conservation when using only Hvv term.
     states = []
-    if Nflav > 1:
+    if Nflav == 1:
         for l in p_states:
-            nstate = int(2**len(l)/4**(len(l)-len(list(set(l)))))
-            #nstate = int(Nflav**len(l)/(Nflav**Nflav)**(len(l)-len(list(set(l)))))
+            #nstate = int(2**len(l)/4**(len(l)-len(list(set(l)))))
+            nstate = int(Nflav**len(l)/(Nflav**Nflav)**(len(l)-len(list(set(l)))))
             rp = []
-            if nstate < 2**len(l):#Nflav**len(l):
+            #if nstate < 2**len(l):
+            if nstate < Nflav**len(l):
                 for i in range(len(l)-1):
                     if l[i] == l[i+1]:
                         rp.append(l[i])
@@ -172,17 +177,53 @@ def stateFinder(instate, Nnu, Nflav, pkectrans):
             for i in range(nstate):
                 state = []
                 for j in range(len(rp)):
-                    #for flav in Nflav:
-                        #state.append(Nflav*rp[j]+flav)
+                    for flav in Nflav:
+                        state.append(Nflav*rp[j]+flav)
+                    #state.append(2*rp[j])
+                    #state.append(2*rp[j]+1)
+                for j in range(Nnrp):
+                    #state.append(2*nrp[j]+(i//2**(Nnrp-j-1))%2)
+                    state.append(Nflav*nrp[j]+(i//Nflav**(Nnrp-j-1))%Nflav)
+                states.append(sorted(state))
+    elif Nflav == 2:
+        Ne = flavcons[0]
+        for l in p_states:
+            nstate = int(2**len(l)/4**(len(l)-len(list(set(l))))) # all possible states (no flavor dependence)
+            Nrp = len(l)-len(set(l))                              # number of repeats
+            fc_nstate = comb(len(l)-2*Nrp, Ne-Nrp)
+            print(f"nstate: {fc_nstate}, l={l}")
+            
+            rp = []                         #repeated momentum modes
+            if nstate < 2**len(l):
+                for i in range(len(l)-1):
+                    if l[i]==l[i+1]:
+                        rp.append(l[i])
+
+            nrp = [x for x in l if x not in rp] #nonrepeated momentum modes
+            numnrp = len(nrp)                   #number of such modes
+
+            #parity of integer in state represents flavor; 2^len(l) flavor combinations per l for nonrepeated
+            for i in range(nstate):
+                
+                state = []
+                evens = 0                   # number of even integers in state (number of electron neutrinos)
+
+                for j in range(len(rp)):        # append duplicated modes twice
                     state.append(2*rp[j])
                     state.append(2*rp[j]+1)
-                for j in range(Nnrp):
-                    state.append(2*nrp[j]+(i//2**(Nnrp-j-1))%2)
-                    #state.append(Nflav*nrp[j]+(i//Nflav**(Nnrp-j-1))%Nflav)
-                states.append(sorted(state))
-    elif Nflav == 1:
-        states = p_states
+                    evens+=1
+                
+                for j in range(numnrp):
+                    value = (2*nrp[j]+(i//2**(numnrp-j-1))%2) # counts in binary
+                    state.append(value)
+                    
+                    if value % 2 == 0:
+                           evens += 1
+
+                if evens == Ne:
+                    states.append(sorted(state))
     Ns = len(states)
+    print(f"Ns: {Ns}")
     bstr_to_j = {}
     j_to_bstr = {}
     for i in range(Ns):
@@ -326,10 +367,8 @@ def buildH(Ns, Nps, Nflav, Nbs, Pstates, pkectrans, momenta4, gfs, bstr_to_j, j_
     print("The Hamiltonian has be generated.")
     return H
 
-
-
-# 
-def observable(Nbs, Ns, Nflav, dt, state, j_to_bstr):
+# Returns observables
+def observable(Nbs, Ns, Nflav, state, j_to_bstr):
     obs = np.zeros(Nbs)
     for i in range(Ns):
         binary = j_to_b(i, Nbs, j_to_bstr)
@@ -342,12 +381,34 @@ def print_cstr(state, i, dt):
 
 # returns string of time and occupation number per bin
 def print_nstr(state, i, Nbs, Ns, Nflav, dt, j_to_bstr):
-    obs = observable(Nbs, Ns, Nflav, dt, state, j_to_bstr)
+    obs = observable(Nbs, Ns, Nflav, state, j_to_bstr)
     obslist = [x for x in obs]
     return str(i*dt) + ' ' + ' '.join([str(x) for x in obs]), obslist
 
+# Microcononical Ensenbal N+ Observable
+def mcNplus(Ns, Nbs, Nps, Nnu, Nflav, flavcons, j_to_bstr):
+    mcstate = (1/np.sqrt(Ns))*np.ones(Ns,dtype=complex)
+    mcObs = observable(Nbs, Ns, Nflav, mcstate, j_to_bstr)
+    plt.rcParams['text.usetex'] = True
+    graph = plt.figure(figsize=(19.2,10.8))
+    x = np.linspace(0, Nps, Nps)
+    mcNpObs = np.zeros((1,Nps))
+    for i in range(Nps):
+        for flav in range(Nflav):
+            mcNpObs[0,i] += mcObs[Nflav*i+flav]
+    plt.scatter(x,mcNpObs[0,:])
+    plt.title(r'Microcanonical ensemble: $N_{i}^{+}N$ Observable ' + f'for Nflav = {Nflav}')
+    plt.xlim([0-1,Nps+1])
+    plt.ylim([-0.05,1.05])
+    plt.grid()
+    plt.xlabel(r'time $(\varepsilon^{-1})$')
+    plt.ylabel(r'$N_{i}^{+}N$')
+    plt.savefig(f'MC_Nflav{Nflav}_Np{Nps}_Nnu{Nnu}_Ne{flavcons[0]}.png')
+    plt.close(graph)
+    return
+
 # Graph generator for momentum observable
-def nplus(instate, U, Nbs, Ns, Nnu, Nps, Nflav, dt, Nt, j_to_bstr):
+def nplus(instate, U, Nbs, Ns, Nnu, Nps, Nflav, flavcons, dt, Nt, j_to_bstr):
     state = instate.copy()
     print("Generating graph for momentum observable...")
     plt.rcParams['text.usetex'] = True
@@ -369,7 +430,7 @@ def nplus(instate, U, Nbs, Ns, Nnu, Nps, Nflav, dt, Nt, j_to_bstr):
         obsstr, obslist = print_nstr(state, i, Nbs, Ns, Nflav, dt, j_to_bstr)
         for j in range(Nps):
             for flav in range(Nflav):
-                obs[0,j] += (1/Nflav)*obslist[Nflav*j+flav]
+                obs[0,j] += obslist[Nflav*j+flav]
         npobs = np.concatenate((npobs, obs.T), axis=1)
     
     # Sanity Checks
@@ -382,11 +443,11 @@ def nplus(instate, U, Nbs, Ns, Nnu, Nps, Nflav, dt, Nt, j_to_bstr):
         plt.plot(times, npobs[i], color='black', linewidth=0.5)
     plt.title(r'$N_{i}^{+}N$ Observable ' + f'for Nflav = {Nflav}')
     plt.xlim([0,Nt*dt])
-    plt.xlabel(r'time $(\epsilon^{-1})$')
+    plt.xlabel(r'time $(\varepsilon^{-1})$')
     plt.ylabel(r'$N_{i}^{+}N$')
-    plt.savefig(f'Nflav{Nflav}_Np{Nps}_Nnu{Nnu}_time{int(dt*Nt)}.png')
-    plt.show()
-    return graph
+    plt.savefig(f'Nflav{Nflav}_Np{Nps}_Nnu{Nnu}_time{int(dt*Nt)}_Ne{flavcons[0]}.png')
+    plt.close(graph)
+    return
 
 # Graph generator for flavor observable
 def nminus(instate, U, Nbs, Ns, Nnu, Nps, Nflav, dt, Nt, j_to_bstr):
@@ -409,16 +470,31 @@ def nminus(instate, U, Nbs, Ns, Nnu, Nps, Nflav, dt, Nt, j_to_bstr):
     plt.show()
     return
 
-# 
+# Perform desired simulations, while adjusting initial flavors to conserve.
 def main():
+    Nflav = 2
+    zmax = 5
+    instate = np.sort(np.array([0,5,8,10,12,20,25,26,28,33]))
+    Nnu = len(instate)
+    for Nmu in range(int(Nnu/2)):
+        Ne = Nnu - Nmu
+        print(f"Running simulation with Ne:{Ne} and Nmu:{Nmu}")
+        flavcons = [Ne,Nmu]
+        test(Nflav, flavcons, zmax, instate)
     return
 
 # QA testing
-def test(Nflav, zmax, instate):
+def test(Nflav, flavcons, zmax, instate):
     Nnu = len(instate)
     
+    # Sanity Checks
+    if not (len(flavcons) == Nflav):
+        raise ValueError("Length of flavcons must match Nflav.")
+    if sum(flavcons) != len(instate):
+        raise ValueError("Total flavor repetitions must exactly match the number of allowed Nps spots.")
+
     Pstates, Nps, pkectrans, momenta4, gfs = pGenerator(zmax)
-    Ns, p_states, bstr_to_j, j_to_bstr = stateFinder(instate, Nnu, Nflav, pkectrans)
+    Ns, p_states, bstr_to_j, j_to_bstr = stateFinder(instate, Nnu, Nflav, flavcons, pkectrans)
     
     Nbs = Nflav*Nps
     tbar = 10**(4)
@@ -434,24 +510,19 @@ def test(Nflav, zmax, instate):
     U = Evecs @ np.diag(np.exp(-dt*Evals*1j)) @ Evecs.conj().T
     
     state = np.zeros(Ns, dtype=complex)
-    trying = True
-    while trying:
-        bchoose = input(f"Choose initial state by inputting {Nnu} allowed momenta and flavors as a pair: momenta,flavor (use space to separate pairs): ")
-        if len([x for x in bchoose.split(' ')]) == Nnu:
-            trying = False
-        b = np.zeros(Nbs, dtype=int)
-        for things in bchoose.split(' '):
-            i, j = [int(x) for x in things.split(',')]
-            b[Nflav*i+j] = 1
-            if j not in [0,1]:
-                trying = True
-            if Nflav*i > Nbs:
-                trying = True
-        #b = ' '.join([str(x) for x in b])
+    
+    # Starting with lower index as Ne, for simplicity.
+    # It is worth investigate how our initial conditions effect our thermalization process.
+    b = np.zeros(Nbs)
+    for flav in range(Nflav):
+        for Nf in range(flavcons[flav]):
+            b[Nflav*instate[Nf+sum(flavcons[:flav])] + flav] = 1
+    
     initj = b_to_j(b, Nbs, bstr_to_j)
     state[initj] = 1.0
-
-    nplus(state, U, Nbs, Ns, Nnu, Nps, Nflav, dt, Nt, j_to_bstr)
+    
+    mcNplus(Ns, Nbs, Nps, Nnu, Nflav, flavcons, j_to_bstr)
+    nplus(state, U, Nbs, Ns, Nnu, Nps, Nflav, flavcons, dt, Nt, j_to_bstr)
     return
 
 def test1():
@@ -459,9 +530,9 @@ def test1():
     Nflav = 1
     instate = np.sort(np.array([0,5,8,10,12,20,25,26,28,33]))
     Nnu = len(instate)
-    
+    flavcons = [Nnu]
     Pstates, Nps, pkectrans, momenta4, gfs = pGenerator(zmax)
-    Ns, p_states, bstr_to_j, j_to_bstr = stateFinder(instate, Nnu, Nflav, pkectrans)
+    Ns, p_states, bstr_to_j, j_to_bstr = stateFinder(instate, Nnu, Nflav, flavcons, pkectrans)
     
     Nbs = Nflav*Nps
     tbar = 10**(4)
@@ -499,12 +570,12 @@ def test1():
     initj = b_to_j(b, Nbs, bstr_to_j)
     state[initj] = 1.0
 
-    nplus(state, U, Nbs, Ns, Nnu, Nps, Nflav, dt, Nt, j_to_bstr)
+    nplus(state, U, Nbs, Ns, Nnu, Nps, Nflav, flavcons, dt, Nt, j_to_bstr)
     return
 
 if __name__ == '__main__':
-    #main()
-    test1()
+    main()
+    #test1()
 
 # Formatting
 #np.set_printoptions(formatter={'all': lambda x: "{:.12g}".format(x)})
