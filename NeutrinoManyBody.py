@@ -141,15 +141,15 @@ def stateFinder(instate, Nnu, Nflav, flavcons, pkectrans):
     # Calculate number of states
     Ns = 0
     skipped = 0
-    for i in range(len(p_states)):
-        pscounter = Counter(p_states[i])
-        Nrptemp = {}
-        for p in sorted(pscounter.values()):
-            Nrptemp[p] = Nrptemp.get(p, 0) + 1
-        Nrp = [0 for x in range(max(Nrptemp.keys()))]
-        for key in Nrptemp.keys():
-            Nrp[key-1] = Nrptemp[key]
-        #if all(Nnu - count*Nrp[count] >= 0 for count in range(len(Nrp))):
+    # for i in range(len(p_states)):
+        # pscounter = Counter(p_states[i])
+        # Nrptemp = {}
+        # for p in sorted(pscounter.values()):
+            # Nrptemp[p] = Nrptemp.get(p, 0) + 1
+        # Nrp = [0 for x in range(max(Nrptemp.keys()))]
+        # for key in Nrptemp.keys():
+            # Nrp[key-1] = Nrptemp[key]
+        # #if all(Nnu - count*Nrp[count] >= 0 for count in range(len(Nrp))):
         
     print(f'Number of states with conserved P,E, and arbitrary flavor contents is {Ns:.0f}')
     bins_visited = np.sort(np.array(list(set(p_states.flatten()))))
@@ -470,20 +470,30 @@ def nminus(instate, U, Nbs, Ns, Nnu, Nps, Nflav, dt, Nt, j_to_bstr):
     plt.show()
     return
 
+# Resort instate so neutrinos will be alternating
+def altsort(lst):
+    lst.sort()
+    n = len(lst)
+    result = [None] * n
+    result[::2] = lst[:n//2]
+    result[1::2] = lst[n//2:]
+    return result
+    
+
 # Perform desired simulations, while adjusting initial flavors to conserve.
 def main():
     Nflav = 2
     zmax = 5
-    instate = np.sort(np.array([0,5,8,10,12,20,25,26,28,33]))
+    instate = np.sort(np.array([5,8,10,12,20,25,26,28]))
     Nnu = len(instate)
-    for Nmu in range(int(Nnu/2)):
+    for Nmu in range(int(Nnu/2+1)):
         Ne = Nnu - Nmu
         print(f"Running simulation with Ne:{Ne} and Nmu:{Nmu}")
         flavcons = [Ne,Nmu]
         test(Nflav, flavcons, zmax, instate)
     return
 
-# QA testing
+# Run simulation for desired system.
 def test(Nflav, flavcons, zmax, instate):
     Nnu = len(instate)
     
@@ -514,9 +524,11 @@ def test(Nflav, flavcons, zmax, instate):
     # Starting with lower index as Ne, for simplicity.
     # It is worth investigate how our initial conditions effect our thermalization process.
     b = np.zeros(Nbs)
+    instateX = altsort(instate)
+    
     for flav in range(Nflav):
         for Nf in range(flavcons[flav]):
-            b[Nflav*instate[Nf+sum(flavcons[:flav])] + flav] = 1
+            b[Nflav*instateX[Nf+sum(flavcons[:flav])] + flav] = 1
     
     initj = b_to_j(b, Nbs, bstr_to_j)
     state[initj] = 1.0
@@ -525,6 +537,7 @@ def test(Nflav, flavcons, zmax, instate):
     nplus(state, U, Nbs, Ns, Nnu, Nps, Nflav, flavcons, dt, Nt, j_to_bstr)
     return
 
+# QA testing
 def test1():
     zmax = 5
     Nflav = 1
