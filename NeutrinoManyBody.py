@@ -28,32 +28,26 @@ def timeyGraphdata(EigValues, EigVectors, state, timey, resolution):
         ExpEigValues[i] = timeywimey(np.copy(EigValues), EigVectors, state, times[i])
     return times, ExpEigValues
 
-# Compare two initial states to see if they really share the same Hilbert space
-def compareHilbert(dt, Nt, Ns, instate, compstate, U, initj, initjY):
+# test effective Hilbert space
+def testHilbert(dt, Nbs, Ns, instate, initj, U):
+    Nt = 1
     state = instate.copy()
-    state2 = compstate.copy()
+    teststates = np.identity(Ns, dtype=complex)
     times = np.linspace(dt, dt*Nt, Nt)
-    data = np.zeros(Nt, dtype=complex)
-    spammy = 0 # Get rid of print spam
-    for time in range(len(times)):
-        state = U @ state
-        expectation = state2.T @ state
-        probability = expectation.conj() * expectation
-        if spammy <= 10 and probability >= (1/Ns):
-            spammy += 1
-            print(f"Likely the same Hilbert space: probability = {probability.real}, expectation = {expectation}.")
-        data[time] = probability.real
-    plt.rcParams['text.usetex'] = True
-    graph = plt.figure(figsize=(19.2,10.8))
-    plt.plot(times, data, color='black', linewidth=1)
-    plt.axhline(y=1/Ns, color='r', linestyle='--', label=r'$1/N_s$')
-    plt.xlim([0,dt*Nt])
-    plt.title(f'Probability of comparison state {initjY} with time progression of state {initj}')
-    plt.grid()
-    plt.xlabel(r'time $(\varepsilon^{-1})$')
-    plt.ylabel(f'Probability of comparison state {initjY}')
-    plt.savefig(f'compareHilbert_Ns{Ns}_s{initj}_vs_s{initjY}')
-    plt.close(graph)
+    testdata = np.full(Ns, False)
+    with open(f"testHilbert_{initj}_{Ns}.txt", 'w') as txtfile:
+        for time in range(1, len(times)+1):
+            state = U @ state
+            testdata = np.full(Ns, False)
+            for i in range(len(teststates)):
+                state2 = teststates[i]
+                expectation = state2.T @ state
+                probability = expectation.conj() * expectation
+                if probability.real > 0:
+                    testdata[i] = True
+            Nbadstates = np.size(testdata) - np.sum(testdata)
+            print(f"Test at time {time}: Number of bad states: {Nbadstates}")
+            txtfile.write(f"Test at time {time}: Number of bad states: {Nbadstates}\n")
     return
 
 # What does saveData do again? Hmmm...
@@ -430,17 +424,20 @@ def mcNplus(Ns, Nbs, Nps, Nnu, Nflav, flavcons, j_to_bstr):
     mcObs = observable(Nbs, Ns, Nflav, mcstate, j_to_bstr)
     plt.rcParams['text.usetex'] = True
     graph = plt.figure(figsize=(19.2,10.8))
-    x = np.linspace(0, Nps, Nps)
+    x = np.linspace(1, Nps, Nps)
     mcNpObs = np.zeros((1,Nps))
     for i in range(Nps):
         for flav in range(Nflav):
             mcNpObs[0,i] += mcObs[Nflav*i+flav]
+    with open(f"McValues_Nplus_Nnu{Nnu}_Nps{Nps}_Nflav{Nflav}_Ne{flavcons[0]}_Ns{Ns}.txt","w") as txtfile:
+        for i in range(Nps):
+            txtfile.write(f"Momentum_mode_{i+1}: {mcNpObs[0,i]}\n")
     plt.scatter(x,mcNpObs[0,:])
     plt.title(r'Microcanonical ensemble: $N_{i}^{+}N$ Observable ')
-    plt.xlim([0-1,Nps+1])
+    plt.xlim([0,Nps+1])
     plt.ylim([-0.05,1.05])
     plt.grid()
-    plt.xlabel(r'time $(\varepsilon^{-1})$')
+    plt.xlabel(r'Index $i$ of momentum mode $\textbf{p}_i$')
     plt.ylabel(r'$N_{i}^{+}N$')
     plt.savefig(f'MC_Nflav{Nflav}_Np{Nps}_Nnu{Nnu}_Ne{flavcons[0]}_Ns{Ns}.png')
     plt.close(graph)
@@ -482,9 +479,9 @@ def nplus(instate, U, Nbs, Ns, Nnu, Nps, Nflav, flavcons, dt, Nt, j_to_bstr, ini
         plt.plot(times, npobs[i], color='black', linewidth=0.5)
     plt.title(r'$N_{i}^{+}N$ Observable')
     plt.xlim([0,Nt*dt])
-    plt.xlabel(r'time $(\varepsilon^{-1})$')
+    plt.xlabel(r'time $(\mathcal{E}^{-1})$')
     plt.ylabel(r'$N_{i}^{+}N$')
-    plt.savefig(f'Nflav{Nflav}_Np{Nps}_Nnu{Nnu}_initj{initj}_Ne{flavcons[0]}_Ns{Ns}_time{int(dt*Nt)}.png')
+    plt.savefig(f'Nplus_Nflav{Nflav}_Np{Nps}_Nnu{Nnu}_initj{initj}_Ne{flavcons[0]}_Ns{Ns}_time{int(dt*Nt)}.png')
     plt.close(graph)
     return
 
@@ -532,31 +529,140 @@ def mcnpdiff(instate, U, Nbs, Ns, Nnu, Nps, Nflav, flavcons, dt, Nt, j_to_bstr, 
         plt.plot(times, npobs[i], color='black', linewidth=0.5)
     plt.title(r'Difference with the Microcanonical Ensemble for the $N_{i}^{+}N$ Observable ')
     plt.xlim([0,Nt*dt])
-    plt.xlabel(r'time $(\varepsilon^{-1})$')
+    plt.xlabel(r'time $(\mathcal{E}^{-1})$')
     plt.ylabel(r'$N_{i}^{+}N$')
-    plt.savefig(f'diffMC_Nflav{Nflav}_Np{Nps}_Nnu{Nnu}_initj{initj}_Ne{flavcons[0]}_Ns{Ns}_time{int(dt*Nt)}.png')
+    plt.savefig(f'diffMC_Nplus_Nflav{Nflav}_Np{Nps}_Nnu{Nnu}_initj{initj}_Ne{flavcons[0]}_Ns{Ns}_time{int(dt*Nt)}.png')
+    plt.close(graph)
+    return
+
+# Microcononical Ensemble N- Observable
+def mcNminus(Ns, Nbs, Nps, Nnu, Nflav, flavcons, j_to_bstr):
+    mcstate = (1/np.sqrt(Ns))*np.ones(Ns,dtype=complex)
+    mcObs = observable(Nbs, Ns, Nflav, mcstate, j_to_bstr)
+    plt.rcParams['text.usetex'] = True
+    graph = plt.figure(figsize=(19.2,10.8))
+    x = np.linspace(1, Nps, Nps)
+    mcNmObs = np.zeros((1,Nps))
+    for i in range(Nps):
+        for flav in range(Nflav):
+            if flav % 2 == 0:
+                mcNmObs[0,i] += mcObs[Nflav*i+flav]
+            if flav % 2 == 1:
+                mcNmObs[0,i] -= mcObs[Nflav*i+flav]
+    with open(f"McValues_Nminus_Nnu{Nnu}_Nps{Nps}_Nflav{Nflav}_Ne{flavcons[0]}_Ns{Ns}.txt","w") as txtfile:
+        for i in range(Nps):
+            txtfile.write(f"Momentum_mode_{i+1}: {mcNmObs[0,i]}\n")
+    plt.scatter(x,mcNmObs[0,:])
+    plt.title(r'Microcanonical ensemble: $N_{i}^{-}N$ Observable ')
+    plt.xlim([0,Nps+1])
+    plt.ylim([-0.05,1.05])
+    plt.grid()
+    plt.xlabel(r'Index $i$ of momentum mode $\textbf{p}_i$')
+    plt.ylabel(r'$N_{i}^{-}N$')
+    plt.savefig(f'MC_Nminus_Nflav{Nflav}_Np{Nps}_Nnu{Nnu}_Ne{flavcons[0]}_Ns{Ns}.png')
     plt.close(graph)
     return
 
 # Graph generator for flavor observable
-def nminus(instate, U, Nbs, Ns, Nnu, Nps, Nflav, dt, Nt, j_to_bstr):
+def nminus(instate, U, Nbs, Ns, Nnu, Nps, Nflav, flavcons, dt, Nt, j_to_bstr, initj):
     state = instate.copy()
-    print("Generating graph for N+ observable...")
+    print("Generating graph for momentum observable...")
     plt.rcParams['text.usetex'] = True
-    graph = plt.figure(figsize=(8,6))
+    graph = plt.figure(figsize=(19.2,10.8))
     times = np.linspace(0, dt*Nt, Nt+1)
+    #npobs = np.array([])
     obsstr, obslist = print_nstr(state, 0, Nbs, Ns, Nflav, dt, j_to_bstr)
-    obs = np.zeros(Nps)
+    obs = np.zeros((1,Nps))
+    for j in range(Nps):
+        for flav in range(Nflav):
+            obs[0,j] += (1/Nflav)*obslist[Nflav*j+flav]
+    nmobs = obs.T.copy()
+    for i in range(1, Nt+1):
+        state = U @ state
+        n = np.linalg.norm(state)
+        if abs(n-1.0) > 1e-5: # Sanity Check
+            print('Norm off by > 1e-5 at time ', i*dt)
+        obs = np.zeros((1,Nps))
+        obsstr, obslist = print_nstr(state, i, Nbs, Ns, Nflav, dt, j_to_bstr)
+        for j in range(Nps):
+            for flav in range(Nflav):
+                if flav % 2 == 0:
+                    obs[0,j] += obslist[Nflav*j+flav]
+                if flav % 2 == 1:
+                    obs[0,j] -= obslist[Nflav*j+flav]
+        nmobs = np.concatenate((nmobs, obs.T), axis=1)
     
-    # TODO: Finish Generalizing Flavor Observable
+    # Sanity Checks
+    print(f'Size of times: {len(times)}')
+    print(f'Size of nmobs: {len(nmobs)}')
+    print(f'Size of one observable list: {len(nmobs[0])}')
+    print(f'Initial state: ' + str(nmobs[:,0]))
     
     for i in range(Nps):
         plt.plot(times, nmobs[i], color='black', linewidth=0.5)
-    plt.title(r'$N_{i}^{-}N$ Observable ' + f'for Nflav = {Nflav}')
+    plt.title(r'$N_{i}^{-}N$ Observable')
     plt.xlim([0,Nt*dt])
-    plt.xlabel(r'time $(\epsilon^{-1})$')
+    plt.xlabel(r'time $(\mathcal{E}^{-1})$')
     plt.ylabel(r'$N_{i}^{-}N$')
-    plt.show()
+    plt.savefig(f'Nminus_Nflav{Nflav}_Np{Nps}_Nnu{Nnu}_initj{initj}_Ne{flavcons[0]}_Ns{Ns}_time{int(dt*Nt)}.png')
+    plt.close(graph)
+    return
+
+# MC diff for N^-_i observable
+def mcnmdiff(instate, U, Nbs, Ns, Nnu, Nps, Nflav, flavcons, dt, Nt, j_to_bstr, initj):
+    state = instate.copy()
+    print("Generating graph for momentum observable...")
+    plt.rcParams['text.usetex'] = True
+    graph = plt.figure(figsize=(19.2,10.8))
+    times = np.linspace(0, dt*Nt, Nt+1)
+    #npobs = np.array([])
+    
+    mcstate = (1/np.sqrt(Ns))*np.ones(Ns,dtype=complex)
+    mcObs = observable(Nbs, Ns, Nflav, mcstate, j_to_bstr)
+    mcNmObs = np.zeros((1,Nps))
+    for i in range(Nps):
+        for flav in range(Nflav):
+            if flav % 2 == 0:
+                mcNmObs[0,i] += mcObs[Nflav*i+flav]
+            if flav % 2 == 1:
+                mcNmObs[0,i] -= mcObs[Nflav*i+flav]
+    
+    obsstr, obslist = print_nstr(state, 0, Nbs, Ns, Nflav, dt, j_to_bstr)
+    obs = np.zeros((1,Nps))
+    for j in range(Nps):
+        for flav in range(Nflav):
+            obs[0,j] += (1/Nflav)*obslist[Nflav*j+flav]
+    nmobs = obs.T.copy()
+    for i in range(1, Nt+1):
+        state = U @ state
+        n = np.linalg.norm(state)
+        if abs(n-1.0) > 1e-5: # Sanity Check
+            print('Norm off by > 1e-5 at time ', i*dt)
+        obs = np.zeros((1,Nps))
+        obsstr, obslist = print_nstr(state, i, Nbs, Ns, Nflav, dt, j_to_bstr)
+        for j in range(Nps):
+            for flav in range(Nflav):
+                if flav % 2 == 0:
+                    obs[0,j] += obslist[Nflav*j+flav]
+                if flav % 2 == 1:
+                    obs[0,j] -= obslist[Nflav*j+flav]
+            obs[0,j] -= mcNmObs[0,j]
+        nmobs = np.concatenate((nmobs, obs.T), axis=1)
+    
+    # Sanity Checks
+    print(f'Size of times: {len(times)}')
+    print(f'Size of nmobs: {len(nmobs)}')
+    print(f'Size of one observable list: {len(nmobs[0])}')
+    print(f'Initial state: ' + str(nmobs[:,0]))
+    
+    for i in range(Nps):
+        plt.plot(times, nmobs[i], color='black', linewidth=0.5)
+    plt.title(r'Difference with the Microcanonical Ensemble for the $N_{i}^{-}N$ Observable ')
+    plt.xlim([0,Nt*dt])
+    plt.xlabel(r'time $(\mathcal{E}^{-1})$')
+    plt.ylabel(r'$N_{i}^{-}N$')
+    plt.savefig(f'diffMC_Nminus_Nflav{Nflav}_Np{Nps}_Nnu{Nnu}_initj{initj}_Ne{flavcons[0]}_Ns{Ns}_time{int(dt*Nt)}.png')
+    plt.close(graph)
     return
 
 # Resort instate so neutrinos will be alternating
@@ -570,7 +676,7 @@ def altsort(lst):
 
 # Perform desired simulations, while adjusting initial flavors to conserve.
 def main():
-    plt.rcParams['font.size'] = 28
+    plt.rcParams['font.size'] = 36
     plt.rcParams['font.weight'] = 'bold'
     
     Nflav = 2
@@ -631,8 +737,8 @@ def test(Nflav, flavcons, zmax, instate):
     stateY[initjY] = 1.0
     
     # Make sure that both states have the same Hilbert space, by checking that they mix.
-    compareHilbert(dt, Nt, Ns, state, stateY, U, initj, initjY)
-    compareHilbert(dt, Nt, Ns, stateY, state, U, initjY, initj)
+#    testHilbert(dt, Nbs, Ns, state.copy(), initj, U)
+#    testHilbert(dt, Nbs, Ns, stateY.copy(), initjY, U)
     
     # Make Graph files for various observables of interest.
     mcNplus(Ns, Nbs, Nps, Nnu, Nflav, flavcons, j_to_bstr)
@@ -641,63 +747,19 @@ def test(Nflav, flavcons, zmax, instate):
     mcnpdiff(state, U, Nbs, Ns, Nnu, Nps, Nflav, flavcons, dt, Nt, j_to_bstr, initj)
     mcnpdiff(stateY, U, Nbs, Ns, Nnu, Nps, Nflav, flavcons, dt, Nt, j_to_bstr, initjY)
     
+    mcNminus(Ns, Nbs, Nps, Nnu, Nflav, flavcons, j_to_bstr)
+    nminus(state, U, Nbs, Ns, Nnu, Nps, Nflav, flavcons, dt, Nt, j_to_bstr, initj)
+    mcnmdiff(state, U, Nbs, Ns, Nnu, Nps, Nflav, flavcons, dt, Nt, j_to_bstr, initj)
+    nminus(stateY, U, Nbs, Ns, Nnu, Nps, Nflav, flavcons, dt, Nt, j_to_bstr, initjY)
+    mcnmdiff(stateY, U, Nbs, Ns, Nnu, Nps, Nflav, flavcons, dt, Nt, j_to_bstr, initjY)
+    
     # Save data to be used later
     #saveData()
     
     return
 
-# QA testing
-def test1():
-    zmax = 5
-    Nflav = 1
-    instate = np.sort(np.array([0,5,8,10,12,20,25,26,28,33]))
-    Nnu = len(instate)
-    flavcons = [Nnu]
-    Pstates, Nps, pkectrans, momenta4, gfs = pGenerator(zmax)
-    Ns, p_states, bstr_to_j, j_to_bstr = stateFinder(instate, Nnu, Nflav, flavcons, pkectrans)
-    
-    Nbs = Nflav*Nps
-    tbar = 10**(4)
-    wbar = 1
-    angle = (1/2)*np.arcsin(0.8)
-    dt = 0.01
-    Nt = 1000
-    
-    H = buildH(Ns, Nps, Nflav, Nbs, Pstates, pkectrans, momenta4, gfs, bstr_to_j, j_to_bstr, tbar, wbar, angle)
-    print("Diagonalizing the hamiltonian...")
-    Evals, Evecs = np.linalg.eigh(H)
-    print("Done diagonalizing hamiltonian.")
-    U = Evecs @ np.diag(np.exp(-dt*Evals*1j)) @ Evecs.conj().T
-    
-    state = np.zeros(Ns, dtype=complex)
-    
-    b = np.zeros(Nbs, dtype=int)
-    for k in instate:
-        b[Nflav*k] = 1  # All same flavor
-    
-    trying = False
-    while trying:
-        bchoose = input(f"Choose initial state by inputting {Nnu} allowed momenta and flavors as a pair: momenta,flavor (use space to separate pairs): ")
-        if len([x for x in bchoose.split(' ')]) == Nnu:
-            trying = False
-        b = np.zeros(Nbs, dtype=int)
-        for things in bchoose.split(' '):
-            i, j = [int(x) for x in things.split(',')]
-            b[Nflav*i+j] = 1
-            if j not in [0,1]:
-                trying = True
-            if Nflav*i > Nbs:
-                trying = True
-        #b = ' '.join([str(x) for x in b])
-    initj = b_to_j(b, Nbs, bstr_to_j)
-    state[initj] = 1.0
-
-    nplus(state, U, Nbs, Ns, Nnu, Nps, Nflav, flavcons, dt, Nt, j_to_bstr)
-    return
-
 if __name__ == '__main__':
     main()
-    #test1()
 
 # Formatting
 #np.set_printoptions(formatter={'all': lambda x: "{:.12g}".format(x)})
