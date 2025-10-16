@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 from itertools import combinations
 from collections import Counter
 from math import comb
+from scipy.optimize import minimize
 
 # Time Evolution Operator; Returns probability
 def timeywimey(EigValues, EigVectors, state, timey):
@@ -28,7 +29,35 @@ def timeyGraphdata(EigValues, EigVectors, state, timey, resolution):
         ExpEigValues[i] = timeywimey(np.copy(EigValues), EigVectors, state, times[i])
     return times, ExpEigValues
 
-# test effective Hilbert space
+# Compare two initial states to see if they really share the same Hilbert space
+def compareHilbert(dt, Nt, Ns, instate, compstate, U, initj, initjY):
+    state = instate.copy()
+    state2 = compstate.copy()
+    times = np.linspace(dt, dt*Nt, Nt)
+    data = np.zeros(Nt, dtype=complex)
+    spammy = 0 # Get rid of print spam
+    for time in range(len(times)):
+        state = U @ state
+        expectation = state2.T @ state
+        probability = expectation.conj() * expectation
+        if spammy <= 10 and probability >= (1/Ns):
+            spammy += 1
+            print(f"Likely the same Hilbert space: probability = {probability.real}, expectation = {expectation}.")
+        data[time] = probability.real
+    plt.rcParams['text.usetex'] = True
+    graph = plt.figure(figsize=(19.2,10.8))
+    plt.plot(times, data, color='black', linewidth=1)
+    plt.axhline(y=1/Ns, color='r', linestyle='--', label=r'$1/N_s$')
+    plt.xlim([0,dt*Nt])
+    plt.title(f'Probability of comparison state {initjY} with time progression of state {initj}')
+    plt.grid()
+    plt.xlabel(r'time $(\varepsilon^{-1})$')
+    plt.ylabel(f'Probability of comparison state {initjY}')
+    plt.savefig(f'compareHilbert_Ns{Ns}_s{initj}_vs_s{initjY}')
+    plt.close(graph)
+    return
+
+# Test effective Hilbert space
 def testHilbert(dt, Nbs, Ns, instate, initj, U):
     Nt = 1
     state = instate.copy()
@@ -50,9 +79,15 @@ def testHilbert(dt, Nbs, Ns, instate, initj, U):
             txtfile.write(f"Test at time {time}: Number of bad states: {Nbadstates}\n")
     return
 
-# What does saveData do again? Hmmm...
-def saveData(Evals, Evecs, H, Nbs, Ns, Nps, Nflav, states, initstate):
-    
+# Saves two different data files.
+def saveData(Evals, Evecs, H, Nnu, Nbs, Ns, Nps, Nflav, flavcons, p_states, instate, initstate, initj):
+    with open(f"Nnu{Nnu}_Nflav{Nflav}_Ne{flavcons[0]}_Nmu{flavcons[1]}_Ns{Ns}_initj{initj}_S.dat", 'w') as txtfile:
+        txtfile.write(f"# Initial momenta: {instate}\n# Flavor conservation: {flavcons}\n# Number of basis states: {Ns}\n# Initial state: {initj}\n#\n# p_states:\n")
+        for p in range(len(p_states)):
+            txtfile.write(' '.join([str(x) for x in p_states[p]]) + '\n')
+    with open(f"Nnu{Nnu}_Nflav{Nflav}_Ne{flavcons[0]}_Nmu{flavcons[1]}_Ns{Ns}_initj{initj}_E.dat", 'w') as txtfile:
+        for i in range(len(Evecs)):
+            txtfile.write(f"{Evals[i]} : {' '.join([str(x) for x in Evecs[:,i]])}\n")
     return
 
 # Load Hamiltonian, its diagonalization, and initial conditions
@@ -405,7 +440,7 @@ def observable(Nbs, Ns, Nflav, state, j_to_bstr):
     obs = np.zeros(Nbs)
     for i in range(Ns):
         binary = j_to_b(i, Nbs, j_to_bstr)
-        obs += np.abs(state[i]**2*np.array(binary))
+        obs += np.abs(state[i])**2*np.array(binary)
     return obs
 
 # returns string of time and wave function amplitude
@@ -433,7 +468,7 @@ def mcNplus(Ns, Nbs, Nps, Nnu, Nflav, flavcons, j_to_bstr):
         for i in range(Nps):
             txtfile.write(f"Momentum_mode_{i+1}: {mcNpObs[0,i]}\n")
     plt.scatter(x,mcNpObs[0,:])
-    plt.title(r'Microcanonical ensemble: $N_{i}^{+}N$ Observable ')
+    plt.title(r'Microcanonical ensemble: $N_{i}^{+}N$; $(N_{e}, N_{\mu})$ = ' + f'({flavcons[0]}, {flavcons[1]})')
     plt.xlim([0,Nps+1])
     plt.ylim([-0.05,1.05])
     plt.grid()
@@ -477,11 +512,11 @@ def nplus(instate, U, Nbs, Ns, Nnu, Nps, Nflav, flavcons, dt, Nt, j_to_bstr, ini
     
     for i in range(Nps):
         plt.plot(times, npobs[i], color='black', linewidth=0.5)
-    plt.title(r'$N_{i}^{+}N$ Observable')
+    plt.title(r'$N_{i}^{+}N$ Observable; $(N_{e}, N_{\mu})$ = ' + f'({flavcons[0]}, {flavcons[1]})')
     plt.xlim([0,Nt*dt])
     plt.xlabel(r'time $(\mathcal{E}^{-1})$')
     plt.ylabel(r'$N_{i}^{+}N$')
-    plt.savefig(f'Nplus_Nflav{Nflav}_Np{Nps}_Nnu{Nnu}_initj{initj}_Ne{flavcons[0]}_Ns{Ns}_time{int(dt*Nt)}.png')
+    plt.savefig(f'Nplus_Nflav{Nflav}_Np{Nps}_Nnu{Nnu}_Ne{flavcons[0]}_Ns{Ns}_initj{initj}_time{int(dt*Nt)}.png')
     plt.close(graph)
     return
 
@@ -519,19 +554,13 @@ def mcnpdiff(instate, U, Nbs, Ns, Nnu, Nps, Nflav, flavcons, dt, Nt, j_to_bstr, 
             obs[0,j] -= mcNpObs[0,j]
         npobs = np.concatenate((npobs, obs.T), axis=1)
     
-    # Sanity Checks
-    print(f'Size of times: {len(times)}')
-    print(f'Size of npobs: {len(npobs)}')
-    print(f'Size of one observable list: {len(npobs[0])}')
-    print(f'Initial state: ' + str(npobs[:,0]))
-    
     for i in range(Nps):
         plt.plot(times, npobs[i], color='black', linewidth=0.5)
-    plt.title(r'Difference with the Microcanonical Ensemble for the $N_{i}^{+}N$ Observable ')
+    plt.title(r'Microcanonical Ensemble Difference: $N_{i}^{+}N$; $(N_{e}, N_{\mu})$ = ' + f'({flavcons[0]}, {flavcons[1]})')
     plt.xlim([0,Nt*dt])
     plt.xlabel(r'time $(\mathcal{E}^{-1})$')
     plt.ylabel(r'$N_{i}^{+}N$')
-    plt.savefig(f'diffMC_Nplus_Nflav{Nflav}_Np{Nps}_Nnu{Nnu}_initj{initj}_Ne{flavcons[0]}_Ns{Ns}_time{int(dt*Nt)}.png')
+    plt.savefig(f'diffMC_Nplus_Nflav{Nflav}_Np{Nps}_Nnu{Nnu}_Ne{flavcons[0]}_Ns{Ns}_initj{initj}_time{int(dt*Nt)}.png')
     plt.close(graph)
     return
 
@@ -553,7 +582,7 @@ def mcNminus(Ns, Nbs, Nps, Nnu, Nflav, flavcons, j_to_bstr):
         for i in range(Nps):
             txtfile.write(f"Momentum_mode_{i+1}: {mcNmObs[0,i]}\n")
     plt.scatter(x,mcNmObs[0,:])
-    plt.title(r'Microcanonical ensemble: $N_{i}^{-}N$ Observable ')
+    plt.title(r'Microcanonical ensemble: $N_{i}^{-}N$; $(N_{e}, N_{\mu})$ = ' + f'({flavcons[0]}, {flavcons[1]})')
     plt.xlim([0,Nps+1])
     plt.ylim([-0.05,1.05])
     plt.grid()
@@ -592,19 +621,13 @@ def nminus(instate, U, Nbs, Ns, Nnu, Nps, Nflav, flavcons, dt, Nt, j_to_bstr, in
                     obs[0,j] -= obslist[Nflav*j+flav]
         nmobs = np.concatenate((nmobs, obs.T), axis=1)
     
-    # Sanity Checks
-    print(f'Size of times: {len(times)}')
-    print(f'Size of nmobs: {len(nmobs)}')
-    print(f'Size of one observable list: {len(nmobs[0])}')
-    print(f'Initial state: ' + str(nmobs[:,0]))
-    
     for i in range(Nps):
         plt.plot(times, nmobs[i], color='black', linewidth=0.5)
-    plt.title(r'$N_{i}^{-}N$ Observable')
+    plt.title(r'$N_{i}^{-}N$ Observable; $(N_{e}, N_{\mu})$ = ' + f'({flavcons[0]}, {flavcons[1]})')
     plt.xlim([0,Nt*dt])
     plt.xlabel(r'time $(\mathcal{E}^{-1})$')
     plt.ylabel(r'$N_{i}^{-}N$')
-    plt.savefig(f'Nminus_Nflav{Nflav}_Np{Nps}_Nnu{Nnu}_initj{initj}_Ne{flavcons[0]}_Ns{Ns}_time{int(dt*Nt)}.png')
+    plt.savefig(f'Nminus_Nflav{Nflav}_Np{Nps}_Nnu{Nnu}_Ne{flavcons[0]}_Ns{Ns}_initj{initj}_time{int(dt*Nt)}.png')
     plt.close(graph)
     return
 
@@ -649,19 +672,13 @@ def mcnmdiff(instate, U, Nbs, Ns, Nnu, Nps, Nflav, flavcons, dt, Nt, j_to_bstr, 
             obs[0,j] -= mcNmObs[0,j]
         nmobs = np.concatenate((nmobs, obs.T), axis=1)
     
-    # Sanity Checks
-    print(f'Size of times: {len(times)}')
-    print(f'Size of nmobs: {len(nmobs)}')
-    print(f'Size of one observable list: {len(nmobs[0])}')
-    print(f'Initial state: ' + str(nmobs[:,0]))
-    
     for i in range(Nps):
         plt.plot(times, nmobs[i], color='black', linewidth=0.5)
-    plt.title(r'Difference with the Microcanonical Ensemble for the $N_{i}^{-}N$ Observable ')
+    plt.title(r'Microcanonical Ensemble Difference: $N_{i}^{-}N$; $(N_{e}, N_{\mu})$ = ' + f'({flavcons[0]}, {flavcons[1]})')
     plt.xlim([0,Nt*dt])
     plt.xlabel(r'time $(\mathcal{E}^{-1})$')
     plt.ylabel(r'$N_{i}^{-}N$')
-    plt.savefig(f'diffMC_Nminus_Nflav{Nflav}_Np{Nps}_Nnu{Nnu}_initj{initj}_Ne{flavcons[0]}_Ns{Ns}_time{int(dt*Nt)}.png')
+    plt.savefig(f'diffMC_Nminus_Nflav{Nflav}_Np{Nps}_Nnu{Nnu}_Ne{flavcons[0]}_Ns{Ns}_initj{initj}_time{int(dt*Nt)}.png')
     plt.close(graph)
     return
 
@@ -674,10 +691,260 @@ def altsort(lst):
     result[1::2] = lst[n//2:]
     return result
 
+# Calculate grand canonical ensemble
+def grandCannon():
+    return
+
+# Calculate canonical ensemble
+def Cannon(Ns, instate, H, Evals, Evecs):
+    psy0 = instate
+    H_init = psy0.T.conj() @ H @ psy0
+    #print(f"H_init: {H_init}\n")
+    def minicannon(params):
+        Z = 0j
+        H_c = 0j
+        beta = params[0]
+        for s in range(Ns):
+            Z += np.exp(-beta*Evals[s])
+            H_c += Evals[s] * np.exp(-beta*Evals[s])
+        return Z, H_c
+    def target(params):
+        Z, H_c = minicannon(params)
+        return ((H_init.real) - (H_c.real)/(Z.real))**2
+    fit = minimize(target, [1])
+    beta = fit.x
+    Z, H_c = minicannon([beta])
+    return fit, beta, Z, H_c
+
+# Scatter-plot of canonical ensemble
+def cannonN(Ns, Nbs, Nps, Nnu, Nflav, flavcons, j_to_bstr, initj, Evecs, Evals, beta, Z):
+    cObs = np.zeros(Nbs)
+    for s in range(Ns):
+        cstate = np.sqrt(np.exp(-beta*Evals[s])/(Z.real)) * Evecs[:,s]
+        cObs += observable(Nbs, Ns, Nflav, cstate, j_to_bstr)
+    plt.rcParams['text.usetex'] = True
+    graph = plt.figure(figsize=(19.2,10.8))
+    x = np.linspace(1, Nps, Nps)
+    cNpObs = np.zeros((1,Nps))
+    cNmObs = np.zeros((1,Nps))
+    for i in range(Nps):
+        for flav in range(Nflav):
+            cNpObs[0,i] += cObs[Nflav*i+flav]
+            if flav % 2 == 0:
+                cNmObs[0,i] += cObs[Nflav*i+flav]
+            if flav % 2 == 1:
+                cNmObs[0,i] -= cObs[Nflav*i+flav]
+    with open(f"cannonValues_Nplus_Nnu{Nnu}_Nps{Nps}_Nflav{Nflav}_Ne{flavcons[0]}_Ns{Ns}_initj{initj}.txt","w") as txtfile:
+        for i in range(Nps):
+            txtfile.write(f"Momentum_mode_{i+1}: {cNpObs[0,i]}\n")
+    plt.scatter(x,cNpObs[0,:])
+    plt.title(r'Canonical ensemble: $N_{i}^{+}N$; $(N_{e}, N_{\mu})$ = ' + f'({flavcons[0]}, {flavcons[1]})')
+    plt.xlim([0,Nps+1])
+    plt.ylim([-0.05,1.05])
+    plt.grid()
+    plt.xlabel(r'Index $i$ of momentum mode $\textbf{p}_i$')
+    plt.ylabel(r'$N_{i}^{+}N$')
+    plt.savefig(f'Cannon_Nplus_Nflav{Nflav}_Np{Nps}_Nnu{Nnu}_Ne{flavcons[0]}_Ns{Ns}_initj{initj}.png')
+    plt.close(graph)
+    
+    graph = plt.figure(figsize=(19.2,10.8))
+    plt.scatter(x,cNmObs[0,:])
+    plt.title(r'Canonical ensemble: $N_{i}^{-}N$; $(N_{e}, N_{\mu})$ = ' + f'({flavcons[0]}, {flavcons[1]})')
+    plt.xlim([0,Nps+1])
+    plt.ylim([-0.05,1.05])
+    plt.grid()
+    plt.xlabel(r'Index $i$ of momentum mode $\textbf{p}_i$')
+    plt.ylabel(r'$N_{i}^{-}N$')
+    plt.savefig(f'Cannon_Nminus_Nflav{Nflav}_Np{Nps}_Nnu{Nnu}_Ne{flavcons[0]}_Ns{Ns}_initj{initj}.png')
+    plt.close(graph)
+    return
+
+def cnpdiff(instate, U, H, Nbs, Ns, Nnu, Nps, Nflav, flavcons, dt, Nt, j_to_bstr, initj, Evecs, Evals):
+    state = instate.copy()
+    fit, beta, Z, H_c = Cannon(Ns, state, H, Evals, Evecs)
+    print("Generating graph for Canonical difference of N+N observable...")
+    plt.rcParams['text.usetex'] = True
+    graph = plt.figure(figsize=(19.2,10.8))
+    times = np.linspace(0, dt*Nt, Nt+1)
+    
+    cObs = np.zeros(Nbs)
+    for s in range(Ns):
+        cstate = np.sqrt(np.exp(-beta*Evals[s])/(Z.real)) * Evecs[:,s]
+        cObs += observable(Nbs, Ns, Nflav, cstate, j_to_bstr)
+    cNpObs = np.zeros((1,Nps))
+    for i in range(Nps):
+        for flav in range(Nflav):
+            cNpObs[0,i] += cObs[Nflav*i+flav]
+    
+    obsstr, obslist = print_nstr(state, 0, Nbs, Ns, Nflav, dt, j_to_bstr)
+    obs = np.zeros((1,Nps))
+    for j in range(Nps):
+        for flav in range(Nflav):
+            obs[0,j] += (1/Nflav)*obslist[Nflav*j+flav]
+    npobs = obs.T.copy()
+    for i in range(1, Nt+1):
+        state = U @ state
+        n = np.linalg.norm(state)
+        if abs(n-1.0) > 1e-5: # Sanity Check
+            print('Norm off by > 1e-5 at time ', i*dt)
+        obs = np.zeros((1,Nps))
+        obsstr, obslist = print_nstr(state, i, Nbs, Ns, Nflav, dt, j_to_bstr)
+        for j in range(Nps):
+            for flav in range(Nflav):
+                obs[0,j] += obslist[Nflav*j+flav]
+            obs[0,j] -= cNpObs[0,j]
+        npobs = np.concatenate((npobs, obs.T), axis=1)
+    
+    for i in range(Nps):
+        plt.plot(times, npobs[i], color='black', linewidth=0.5)
+    plt.title(r'Canonical Ensemble Difference: $N_{i}^{+}N$; $(N_{e}, N_{\mu})$ = ' + f'({flavcons[0]}, {flavcons[1]})')
+    plt.xlim([0,Nt*dt])
+    plt.xlabel(r'time $(\mathcal{E}^{-1})$')
+    plt.ylabel(r'$N_{i}^{+}N$')
+    plt.savefig(f'diffCannon_Nplus_Nflav{Nflav}_Np{Nps}_Nnu{Nnu}_Ne{flavcons[0]}_Ns{Ns}_initj{initj}_time{int(dt*Nt)}.png')
+    plt.close(graph)
+    return
+
+def cnmdiff(instate, U, H, Nbs, Ns, Nnu, Nps, Nflav, flavcons, dt, Nt, j_to_bstr, initj, Evecs, Evals):
+    state = instate.copy()
+    fit, beta, Z, H_c = Cannon(Ns, state, H, Evals, Evecs)
+    print("Generating graph for Canonical difference of N-N observable...")
+    plt.rcParams['text.usetex'] = True
+    graph = plt.figure(figsize=(19.2,10.8))
+    times = np.linspace(0, dt*Nt, Nt+1)
+    
+    cObs = np.zeros(Nbs)
+    for s in range(Ns):
+        cstate = np.sqrt(np.exp(-beta*Evals[s])/(Z.real)) * Evecs[:,s]
+        cObs += observable(Nbs, Ns, Nflav, cstate, j_to_bstr)
+    cNmObs = np.zeros((1,Nps))
+    for i in range(Nps):
+        for flav in range(Nflav):
+            if flav % 2 == 0:
+                cNmObs[0,i] += cObs[Nflav*i+flav]
+            if flav % 2 == 1:
+                cNmObs[0,i] -= cObs[Nflav*i+flav]
+    
+    obsstr, obslist = print_nstr(state, 0, Nbs, Ns, Nflav, dt, j_to_bstr)
+    obs = np.zeros((1,Nps))
+    for j in range(Nps):
+        for flav in range(Nflav):
+            obs[0,j] += (1/Nflav)*obslist[Nflav*j+flav]
+    nmobs = obs.T.copy()
+    for i in range(1, Nt+1):
+        state = U @ state
+        n = np.linalg.norm(state)
+        if abs(n-1.0) > 1e-5: # Sanity Check
+            print('Norm off by > 1e-5 at time ', i*dt)
+        obs = np.zeros((1,Nps))
+        obsstr, obslist = print_nstr(state, i, Nbs, Ns, Nflav, dt, j_to_bstr)
+        for j in range(Nps):
+            for flav in range(Nflav):
+                if flav % 2 == 0:
+                    obs[0,j] += obslist[Nflav*j+flav]
+                if flav % 2 == 1:
+                    obs[0,j] -= obslist[Nflav*j+flav]
+            obs[0,j] -= cNmObs[0,j]
+        nmobs = np.concatenate((nmobs, obs.T), axis=1)
+    
+    for i in range(Nps):
+        plt.plot(times, nmobs[i], color='black', linewidth=0.5)
+    plt.title(r'Canonical Ensemble Difference: $N_{i}^{-}N$; $(N_{e}, N_{\mu})$ = ' + f'({flavcons[0]}, {flavcons[1]})')
+    plt.xlim([0,Nt*dt])
+    plt.xlabel(r'time $(\mathcal{E}^{-1})$')
+    plt.ylabel(r'$N_{i}^{-}N$')
+    plt.savefig(f'diffCannon_Nminus_Nflav{Nflav}_Np{Nps}_Nnu{Nnu}_Ne{flavcons[0]}_Ns{Ns}_initj{initj}_time{int(dt*Nt)}.png')
+    plt.close(graph)
+    return
+
+# Spectrum
+def spectrum(Nnu, Nflav, Nps, flavcons, Ns, Evals):
+    plt.rcParams['text.usetex'] = True
+    graph = plt.figure(figsize=(19.2,10.8))
+    Esteps = Evals[1:] - Evals[:-1]
+    Degens = []
+    for s in range(Ns):
+        for s2 in range(s+1,Ns):
+            if np.abs(Evals[s]-Evals[s2]) < 1e-9:
+                Degens.append((s,s2))
+                print(f'Energy degeneracy observed betweem states {s} and {s2}!')
+    if Esteps.min() < 1e-9:
+        print('###### Energy degeneracy observed! ######')
+    plt.scatter(np.arange(Ns), Evals)
+    plt.grid()
+    plt.title('Energy Spectrum of Basis States; $(N_{e}, N_{\mu})$ = ' + f'({flavcons[0]}, {flavcons[1]})')
+    plt.xlabel('Eigenstate index')
+    plt.ylabel('Eigenvalue')
+    plt.savefig(f'EnergySpectrum_Nnu{Nnu}_Nflav{Nflav}_Np{Nps}_Ne{flavcons[0]}_Ns{Ns}.png')
+    plt.close(graph)
+    return
+
+# Delta E
+def Einfo(Nnu, Nflav, Nps, flavcons, Ns, instate, initj, H, Evals, Evecs):
+    c_n = np.zeros(Ns, dtype=complex)
+    Eave = 0
+    EEave = 0
+    for s in range(Ns):
+        c_n[s] = Evecs[s].conj().T @ instate
+        Eave += Evals[s] * (np.abs(Evecs[s].conj().T @ instate)**2)
+        EEave += (Evals[s]**2) * (np.abs(Evecs[s].conj().T @ instate)**2)
+    deff = 1/(np.sum(np.abs(np.array(c_n)**4)))
+    Evar = EEave - (Eave**2)
+    deltaE = np.sqrt(Evar)
+    txtfile = open(f'Einfo_Nnu{Nnu}_Nflav{Nflav}_Np{Nps}_Ne{flavcons[0]}_Ns{Ns}_initj{initj}.txt', 'w')
+    txtfile.write(f'<E> = {Eave}\n<E^2> = {EEave}\nVariance(E) = {Evar}\nsigma(E) = {deltaE}\ndeff(omega) = {deff}\n\nc_n values:\n')
+    for s in range(Ns):
+        txtfile.write(f'c_{s} = {str(c_n[s])}\n')
+    return Eave, EEave, Evar, deltaE, deff, c_n
+
+# Graph some data
+def graphScatter(X, Y, xlim, ylim, xlbl, ylbl, title, filename):
+    plt.rcParams['text.usetex'] = True
+    graph = plt.figure(figsize=(19.2,10.8))
+    plt.scatter(X,Y)
+    plt.grid()
+    plt.title(title)
+    #plt.xlim(xlim)
+    plt.xlabel(xlbl)
+    plt.ylabel(ylbl)
+    plt.savefig(filename)
+    plt.close(graph)
+    return
+
+#return matrix representation of a*(b1)a(b2)
+def Onebody_matrix(b1,b2, Ns, Nbs, j_to_bstr, bstr_to_j):
+    mat = np.zeros((Ns,Ns))*1j
+    for i in range(Ns):
+        sin = j_to_b(i, Nbs, j_to_bstr)
+        l, f, sout = quad([b1,b2], sin)
+        if l == 1:
+            mat[b_to_j(sout, Nbs, bstr_to_j),i] += f
+    return mat
+
+def matrixElements(pmode, Ns, Nbs, j_to_bstr, bstr_to_j, Evals, Evecs):
+    nplus_mat = Onebody_matrix(2*pmode,2*pmode, Ns, Nbs, j_to_bstr, bstr_to_j) + Onebody_matrix(2*pmode+1,2*pmode+1, Ns, Nbs, j_to_bstr, bstr_to_j)
+    nminus_mat = Onebody_matrix(2*pmode,2*pmode, Ns, Nbs, j_to_bstr, bstr_to_j) - Onebody_matrix(2*pmode+1,2*pmode+1, Ns, Nbs, j_to_bstr, bstr_to_j)
+    obs_plus_diag = []
+    obs_minus_diag = []
+    obs_plus_offdiag = []
+    obs_minus_offdiag = []
+    Ediff = []
+    for s in range(Ns):
+        obs_plus_diag.append(np.abs(Evecs[:,s].conj().T @ nplus_mat @ Evecs[:,s]))
+        obs_minus_diag.append(np.abs(Evecs[:,s].conj().T @ nminus_mat @ Evecs[:,s]))
+        for s2 in range(Ns):
+            if s2 == s:
+                continue
+            obs_plus_offdiag.append(np.abs(Evecs[:,s].conj().T @ nplus_mat @ Evecs[:,s2]))
+            obs_minus_offdiag.append(np.abs(Evecs[:,s].conj().T @ nminus_mat @ Evecs[:,s2]))
+            Ediff.append(Evals[s] - Evals[s2])
+    return
+
 # Perform desired simulations, while adjusting initial flavors to conserve.
 def main():
     plt.rcParams['font.size'] = 36
     plt.rcParams['font.weight'] = 'bold'
+    plt.rcParams['text.usetex'] = True
     
     Nflav = 2
     zmax = 5
@@ -736,9 +1003,42 @@ def test(Nflav, flavcons, zmax, instate):
     state[initj] = 1.0
     stateY[initjY] = 1.0
     
+    # Energy information
+    spectrum(Nnu, Nflav, Nps, flavcons, Ns, Evals)
+    Eave, EEave, Evar, deltaE, deff, c_n = Einfo(Nnu, Nflav, Nps, flavcons, Ns, state, initj, H, Evals, Evecs)
+    X = range(Ns)
+    Y = [np.abs(c_n[s]) for s in range(Ns)]
+    xlim = []
+    ylim = []
+    xlbl = "Eigenstate index"
+    ylbl = r"$|c_n|$"
+    title = r"$c_n$ values of" + f" initj{initj}" + r"; $(N_{e}, N_{\mu})$ =" + f" ({flavcons[0]}, {flavcons[1]})"
+    filename = f"c_n_values_Nnu{Nnu}_Nflav{Nflav}_Np{Nps}_Ne{flavcons[0]}_Ns{Ns}_initj{initj}.png"
+    graphScatter(X, Y, xlim, ylim, xlbl, ylbl, title, filename)
+    
+    EaveY, EEaveY, EvarY, deltaEY, deffY, c_nY = Einfo(Nnu, Nflav, Nps, flavcons, Ns, stateY, initjY, H, Evals, Evecs)
+    Y = [np.abs(c_nY[s]) for s in range(Ns)]
+    title = r"$c_n$ values of" + f" initj{initjY}" + r"; $(N_{e}, N_{\mu})$ =" + f" ({flavcons[0]}, {flavcons[1]})"
+    filename = f"c_n_values_Nnu{Nnu}_Nflav{Nflav}_Np{Nps}_Ne{flavcons[0]}_Ns{Ns}_initj{initjY}.png"
+    graphScatter(X, Y, xlim, ylim, xlbl, ylbl, title, filename)
+    
+    # Canonical ensemble
+    fit, beta, Z, H_c = Cannon(Ns, state, H, Evals, Evecs)
+    print(fit)
+    fitY, betaY, ZY, H_cY = Cannon(Ns, stateY, H, Evals, Evecs)
+    cannonN(Ns, Nbs, Nps, Nnu, Nflav, flavcons, j_to_bstr, initj, Evecs, Evals, beta, Z)
+    cannonN(Ns, Nbs, Nps, Nnu, Nflav, flavcons, j_to_bstr, initjY, Evecs, Evals, betaY, ZY)
+    cnpdiff(state, U, H, Nbs, Ns, Nnu, Nps, Nflav, flavcons, dt, Nt, j_to_bstr, initj, Evecs, Evals)
+    cnpdiff(stateY, U, H, Nbs, Ns, Nnu, Nps, Nflav, flavcons, dt, Nt, j_to_bstr, initjY, Evecs, Evals)
+    cnmdiff(state, U, H, Nbs, Ns, Nnu, Nps, Nflav, flavcons, dt, Nt, j_to_bstr, initj, Evecs, Evals)
+    cnmdiff(stateY, U, H, Nbs, Ns, Nnu, Nps, Nflav, flavcons, dt, Nt, j_to_bstr, initjY, Evecs, Evals)
+    
     # Make sure that both states have the same Hilbert space, by checking that they mix.
-#    testHilbert(dt, Nbs, Ns, state.copy(), initj, U)
-#    testHilbert(dt, Nbs, Ns, stateY.copy(), initjY, U)
+    #compareHilbert(dt, Nt, Ns, state, stateY, U, initj, initjY)
+    #compareHilbert(dt, Nt, Ns, stateY, state, U, initjY, initj)
+    testHilbert(dt, Nbs, Ns, state.copy(), initj, U)
+    testHilbert(dt, Nbs, Ns, stateY.copy(), initjY, U)
+    saveData(Evals, Evecs, H, Nnu, Nbs, Ns, Nps, Nflav, flavcons, p_states, instate, state, initj)
     
     # Make Graph files for various observables of interest.
     mcNplus(Ns, Nbs, Nps, Nnu, Nflav, flavcons, j_to_bstr)
@@ -758,8 +1058,58 @@ def test(Nflav, flavcons, zmax, instate):
     
     return
 
+# QA testing
+def test1():
+    zmax = 5
+    Nflav = 1
+    instate = np.sort(np.array([0,5,8,10,12,20,25,26,28,33]))
+    Nnu = len(instate)
+    flavcons = [Nnu]
+    Pstates, Nps, pkectrans, momenta4, gfs = pGenerator(zmax)
+    Ns, p_states, bstr_to_j, j_to_bstr = stateFinder(instate, Nnu, Nflav, flavcons, pkectrans)
+    
+    Nbs = Nflav*Nps
+    tbar = 10**(4)
+    wbar = 1
+    angle = (1/2)*np.arcsin(0.8)
+    dt = 0.01
+    Nt = 1000
+    
+    H = buildH(Ns, Nps, Nflav, Nbs, Pstates, pkectrans, momenta4, gfs, bstr_to_j, j_to_bstr, tbar, wbar, angle)
+    print("Diagonalizing the hamiltonian...")
+    Evals, Evecs = np.linalg.eigh(H)
+    print("Done diagonalizing hamiltonian.")
+    U = Evecs @ np.diag(np.exp(-dt*Evals*1j)) @ Evecs.conj().T
+    
+    state = np.zeros(Ns, dtype=complex)
+    
+    b = np.zeros(Nbs, dtype=int)
+    for k in instate:
+        b[Nflav*k] = 1  # All same flavor
+    
+    trying = False
+    while trying:
+        bchoose = input(f"Choose initial state by inputting {Nnu} allowed momenta and flavors as a pair: momenta,flavor (use space to separate pairs): ")
+        if len([x for x in bchoose.split(' ')]) == Nnu:
+            trying = False
+        b = np.zeros(Nbs, dtype=int)
+        for things in bchoose.split(' '):
+            i, j = [int(x) for x in things.split(',')]
+            b[Nflav*i+j] = 1
+            if j not in [0,1]:
+                trying = True
+            if Nflav*i > Nbs:
+                trying = True
+        #b = ' '.join([str(x) for x in b])
+    initj = b_to_j(b, Nbs, bstr_to_j)
+    state[initj] = 1.0
+
+    nplus(state, U, Nbs, Ns, Nnu, Nps, Nflav, flavcons, dt, Nt, j_to_bstr)
+    return
+
 if __name__ == '__main__':
     main()
+    #test1()
 
 # Formatting
 #np.set_printoptions(formatter={'all': lambda x: "{:.12g}".format(x)})
